@@ -213,4 +213,28 @@ class ConnectionManagerTest {
         assertEquals("SHA256:new", targets.last().trustedFingerprint)
         assertTrue(created[0].closed)
     }
+
+    @Test
+    fun editing_the_active_profile_reconnects_with_new_details() = runTest {
+        val manager = manager()
+        val id = addProfile("1")
+        runCurrent()
+        profiles.save(profiles.get(id)!!.copy(host = "10.9.9.9"))
+        runCurrent()
+        assertTrue(manager.state.value is ConnectionState.Online)
+        assertEquals("10.9.9.9", targets.last().host)
+        assertTrue(created[0].closed)
+        assertEquals(2, created.size)
+    }
+
+    @Test
+    fun editing_another_profile_does_not_reconnect() = runTest {
+        manager()
+        addProfile("1")
+        val other = addProfile("2", activate = false)
+        runCurrent()
+        profiles.save(profiles.get(other)!!.copy(host = "10.9.9.9"))
+        runCurrent()
+        assertEquals(1, created.size)
+    }
 }
