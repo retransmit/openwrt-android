@@ -8,7 +8,7 @@ class ShellQuoteTest {
     fun plain_value_is_wrapped() = assertEquals("'abc'", shellQuote("abc"))
 
     @Test
-    fun single_quote_is_escaped() = assertEquals("'it'\''s'", shellQuote("it's"))
+    fun single_quote_is_escaped() = assertEquals("'it'\\''s'", shellQuote("it's"))
 
     @Test
     fun metacharacters_stay_literal() =

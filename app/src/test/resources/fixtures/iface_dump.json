@@ -1,0 +1,5 @@
+{"interface":[
+ {"interface":"loopback","up":true,"l3_device":"lo","device":"lo","route":[]},
+ {"interface":"lan","up":true,"l3_device":"br-lan","device":"br-lan","route":[]},
+ {"interface":"wan","up":true,"l3_device":"eth1","device":"eth1","route":[{"target":"0.0.0.0","mask":0,"nexthop":"100.64.0.1","source":"0.0.0.0/0"}]},
+ {"interface":"wan6","up":false,"device":"eth1","route":[]}]}
