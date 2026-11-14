@@ -106,3 +106,11 @@ object DeviceSetupModule {
     fun keySource(): dev.openwrtmanager.app.ui.devices.KeySource =
         dev.openwrtmanager.app.ui.devices.KeySource { dev.openwrtmanager.app.ssh.KeyGenerator.generateEd25519() }
 }
+
+@Module
+@InstallIn(SingletonComponent::class)
+object TimeModule {
+    @Provides
+    fun timeSource(): dev.openwrtmanager.app.ui.home.TimeSource =
+        dev.openwrtmanager.app.ui.home.TimeSource { android.os.SystemClock.elapsedRealtime() }
+}
