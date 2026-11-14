@@ -61,3 +61,33 @@ object AppModule {
         @SettingsStore settings: DataStore<Preferences>,
     ): ProfileRepository = RoomProfileRepository(database.profileDao(), secrets, settings)
 }
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ApplicationScope
+
+@Module
+@InstallIn(SingletonComponent::class)
+object ConnectionModule {
+
+    @Provides
+    @Singleton
+    @ApplicationScope
+    fun applicationScope(): kotlinx.coroutines.CoroutineScope =
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
+    @Provides
+    @Singleton
+    fun executorFactory(): dev.openwrtmanager.app.connection.SshExecutorFactory =
+        dev.openwrtmanager.app.connection.SshExecutorFactory { target -> dev.openwrtmanager.app.ssh.SshjExecutor(target) }
+
+    @Provides
+    @Singleton
+    fun connectionManager(
+        profiles: ProfileRepository,
+        secrets: SecretStore,
+        factory: dev.openwrtmanager.app.connection.SshExecutorFactory,
+        @ApplicationScope scope: kotlinx.coroutines.CoroutineScope,
+    ): dev.openwrtmanager.app.connection.ConnectionManager =
+        dev.openwrtmanager.app.connection.ConnectionManager(profiles, secrets, factory, scope)
+}
