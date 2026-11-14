@@ -188,7 +188,8 @@ class HomeViewModel @Inject constructor(
                 uplinkPresent = device != null,
                 system = system ?: old.system,
                 wifi = rows,
-                clientTotal = leases ?: rows.sumOf { it.clients },
+                // Leases miss clients served by another DHCP server; Wi-Fi counts miss wired ones. Show the larger.
+                clientTotal = maxOf(leases ?: 0, rows.sumOf { it.clients }),
             )
         }
     }

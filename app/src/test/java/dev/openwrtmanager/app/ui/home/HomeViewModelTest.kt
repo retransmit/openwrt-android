@@ -228,4 +228,14 @@ class HomeViewModelTest {
         assertFalse(rows[2].encrypted)
         assertFalse(rows[2].up)
     }
+
+    @Test
+    fun client_total_is_never_below_connected_wifi_clients() = runTest(dispatcher) {
+        // An access point can have an empty lease file while clients are connected over Wi-Fi.
+        router.respond(CMD_LEASES, "")
+        addProfile()
+        val vm = start()
+        runCurrent()
+        assertEquals(2, vm.ui.value.clientTotal)
+    }
 }
