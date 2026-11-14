@@ -42,6 +42,10 @@ android {
             )
         }
     }
+    sourceSets {
+        getByName("test").kotlin.directories.add("src/sharedTest/java")
+        getByName("androidTest").kotlin.directories.add("src/sharedTest/java")
+    }
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
@@ -91,4 +95,10 @@ dependencies {
     testImplementation(libs.sshd.core)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.junit)
+
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }
