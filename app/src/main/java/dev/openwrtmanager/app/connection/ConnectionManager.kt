@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
@@ -51,7 +53,10 @@ class ConnectionManager(
 
     init {
         scope.launch {
-            profiles.observeActiveId().collectLatest { id -> serve(id) }
+            // Re-serve whenever the active profile changes or its stored details are edited.
+            combine(profiles.observeActiveId(), profiles.observeAll()) { id, all -> all.firstOrNull { it.id == id } }
+                .distinctUntilChanged()
+                .collectLatest { profile -> serve(profile?.id) }
         }
     }
 

@@ -91,3 +91,18 @@ object ConnectionModule {
     ): dev.openwrtmanager.app.connection.ConnectionManager =
         dev.openwrtmanager.app.connection.ConnectionManager(profiles, secrets, factory, scope)
 }
+
+@Module
+@InstallIn(SingletonComponent::class)
+object DeviceSetupModule {
+
+    @Provides
+    fun fingerprintProbe(): dev.openwrtmanager.app.ui.devices.FingerprintProbe =
+        dev.openwrtmanager.app.ui.devices.FingerprintProbe { host, port ->
+            dev.openwrtmanager.app.ssh.SshjExecutor.probeFingerprint(host, port)
+        }
+
+    @Provides
+    fun keySource(): dev.openwrtmanager.app.ui.devices.KeySource =
+        dev.openwrtmanager.app.ui.devices.KeySource { dev.openwrtmanager.app.ssh.KeyGenerator.generateEd25519() }
+}
