@@ -1,0 +1,8 @@
+{"radio0":{"up":true,"pending":false,"config":{"band":"2g","channel":"6","htmode":"HE20"},"interfaces":[
+   {"section":"default_radio0","ifname":"phy0-ap0","config":{"mode":"ap","ssid":"Home","encryption":"sae-mixed","network":["lan"]}},
+   {"section":"wifinet2","ifname":"phy0-ap1","config":{"mode":"ap","ssid":"Joe's \"IoT\" 📶","encryption":"psk2","network":["iot"]}}]},
+ "radio1":{"up":true,"pending":false,"config":{"band":"5g","channel":"36","htmode":"HE80"},"interfaces":[
+   {"section":"default_radio1","ifname":"phy1-ap0","config":{"mode":"ap","ssid":"Home","encryption":"sae-mixed","network":["lan"]}},
+   {"section":"wifinet4","ifname":"phy1-sta0","config":{"mode":"sta","ssid":"Upstream","encryption":"psk2"}}]},
+ "radio2":{"up":false,"pending":false,"config":{"hwmode":"11a","channel":"auto"},"interfaces":[
+   {"section":"wifinet5","config":{"mode":"ap","ssid":"Guest","encryption":"none"}}]}}

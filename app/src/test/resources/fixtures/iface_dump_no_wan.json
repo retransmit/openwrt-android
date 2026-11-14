@@ -1,0 +1,3 @@
+{"interface":[
+ {"interface":"loopback","up":true,"l3_device":"lo","device":"lo","route":[]},
+ {"interface":"lan","up":true,"l3_device":"br-lan","device":"br-lan","route":[]}]}
