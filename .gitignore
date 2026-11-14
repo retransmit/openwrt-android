@@ -1,1 +1,10 @@
 docs/
+.superpowers/
+.gradle/
+.idea/
+.kotlin/
+build/
+local.properties
+*.iml
+captures/
+.DS_Store
