@@ -9,6 +9,7 @@ import dev.openwrtmanager.app.domain.Band
 import dev.openwrtmanager.app.domain.Rate
 import dev.openwrtmanager.app.domain.RateSampler
 import dev.openwrtmanager.app.domain.SystemInfo
+import dev.openwrtmanager.app.domain.TimeSource
 import dev.openwrtmanager.app.domain.WifiNetwork
 import dev.openwrtmanager.app.router.RouterClient
 import dev.openwrtmanager.app.router.RouterError
@@ -25,10 +26,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
-fun interface TimeSource {
-    /** Monotonic milliseconds. */
-    fun nowMillis(): Long
-}
 
 sealed interface HomeStatus {
     data object NoDevice : HomeStatus
