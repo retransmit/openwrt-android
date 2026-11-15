@@ -111,6 +111,6 @@ object DeviceSetupModule {
 @InstallIn(SingletonComponent::class)
 object TimeModule {
     @Provides
-    fun timeSource(): dev.openwrtmanager.app.ui.home.TimeSource =
-        dev.openwrtmanager.app.ui.home.TimeSource { android.os.SystemClock.elapsedRealtime() }
+    fun timeSource(): dev.openwrtmanager.app.domain.TimeSource =
+        dev.openwrtmanager.app.domain.TimeSource { android.os.SystemClock.elapsedRealtime() }
 }

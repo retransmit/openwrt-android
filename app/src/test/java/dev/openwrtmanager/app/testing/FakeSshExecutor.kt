@@ -12,6 +12,9 @@ class FakeSshExecutor(
 
     /** Simulates a bug or platform failure that is not a transport error. */
     var crashWith: RuntimeException? = null
+
+    /** Consulted first. Return null to fall through to the canned responses; throw to simulate a failure. */
+    var handler: ((String) -> ExecResult?)? = null
     var closed = false
 
     fun respond(command: String, stdout: String, exitCode: Int = 0, stderr: String = "") {
@@ -22,6 +25,7 @@ class FakeSshExecutor(
         failWith?.let { throw it }
         crashWith?.let { throw it }
         commands += command
+        handler?.invoke(command)?.let { return it }
         return responses[command] ?: ExecResult(127, "", "not found")
     }
 
