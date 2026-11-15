@@ -85,6 +85,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     implementation(libs.sshj)
+    implementation(libs.zxing.core)
     implementation(libs.bouncycastle.prov)
     implementation(libs.bouncycastle.pkix)
 
