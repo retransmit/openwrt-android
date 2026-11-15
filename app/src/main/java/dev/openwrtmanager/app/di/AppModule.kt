@@ -17,6 +17,7 @@ import dev.openwrtmanager.app.data.ProfileRepository
 import dev.openwrtmanager.app.data.RoomProfileRepository
 import dev.openwrtmanager.app.data.SecretStore
 import javax.inject.Qualifier
+import kotlinx.coroutines.flow.first
 import javax.inject.Singleton
 
 @Qualifier
@@ -113,4 +114,30 @@ object TimeModule {
     @Provides
     fun timeSource(): dev.openwrtmanager.app.domain.TimeSource =
         dev.openwrtmanager.app.domain.TimeSource { android.os.SystemClock.elapsedRealtime() }
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object ApplyModule {
+    /**
+     * Each apply runs on its own SSH connection to the current device, so it is not affected by the
+     * polling connection being torn down and rebuilt while the router reloads.
+     */
+    @Provides
+    fun applySessionFactory(
+        profiles: ProfileRepository,
+        secrets: SecretStore,
+        executors: dev.openwrtmanager.app.connection.SshExecutorFactory,
+        time: dev.openwrtmanager.app.domain.TimeSource,
+    ): dev.openwrtmanager.app.ui.apply.ApplySessionFactory = dev.openwrtmanager.app.ui.apply.ApplySessionFactory {
+        val id = profiles.observeActiveId().first() ?: return@ApplySessionFactory null
+        val profile = profiles.get(id) ?: return@ApplySessionFactory null
+        val secret = secrets.get(id) ?: return@ApplySessionFactory null
+        val executor = executors.create(
+            dev.openwrtmanager.app.ssh.SshTarget(
+                profile.host, profile.port, profile.username, profile.authType, secret, profile.hostKeyFingerprint,
+            ),
+        )
+        dev.openwrtmanager.app.ui.apply.ApplySession(dev.openwrtmanager.app.apply.SafeApply(executor, time)) { executor.close() }
+    }
 }
