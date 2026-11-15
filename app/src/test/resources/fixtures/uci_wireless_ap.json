@@ -1,0 +1,56 @@
+{
+	"values": {
+		"radio0": {
+			".anonymous": false,
+			".type": "wifi-device",
+			".name": "radio0",
+			".index": 0,
+			"type": "mac80211",
+			"path": "1e140000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0",
+			"band": "2g",
+			"channel": "3",
+			"htmode": "HT20",
+			"cell_density": "0"
+		},
+		"default_radio0": {
+			".anonymous": false,
+			".type": "wifi-iface",
+			".name": "default_radio0",
+			".index": 1,
+			"device": "radio0",
+			"network": "lan",
+			"mode": "ap",
+			"ssid": "Home",
+			"encryption": "psk2",
+			"key": "hunter22pass",
+			"ieee80211k": "1",
+			"bss_transition": "1"
+		},
+		"radio1": {
+			".anonymous": false,
+			".type": "wifi-device",
+			".name": "radio1",
+			".index": 2,
+			"type": "mac80211",
+			"path": "1e140000.pcie/pci0000:00/0000:00:01.0/0000:02:00.0",
+			"band": "5g",
+			"channel": "36",
+			"htmode": "VHT80",
+			"cell_density": "0"
+		},
+		"default_radio1": {
+			".anonymous": false,
+			".type": "wifi-iface",
+			".name": "default_radio1",
+			".index": 3,
+			"device": "radio1",
+			"network": "lan",
+			"mode": "ap",
+			"ssid": "Home",
+			"encryption": "psk2",
+			"key": "hunter22pass",
+			"ieee80211k": "1",
+			"bss_transition": "1"
+		}
+	}
+}

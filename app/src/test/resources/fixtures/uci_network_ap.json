@@ -1,0 +1,63 @@
+{
+	"values": {
+		"loopback": {
+			".anonymous": false,
+			".type": "interface",
+			".name": "loopback",
+			".index": 0,
+			"device": "lo",
+			"proto": "static",
+			"ipaddr": [
+				"127.0.0.1/8"
+			]
+		},
+		"globals": {
+			".anonymous": false,
+			".type": "globals",
+			".name": "globals",
+			".index": 1,
+			"dhcp_default_duid": "0004000000000000000000000000000000000000",
+			"ula_prefix": "fd00:1234:5678::/48",
+			"packet_steering": "1"
+		},
+		"cfg030f15": {
+			".anonymous": true,
+			".type": "device",
+			".name": "cfg030f15",
+			".index": 2,
+			"name": "br-lan",
+			"type": "bridge",
+			"ports": [
+				"lan1",
+				"lan2",
+				"lan3",
+				"lan4",
+				"wan"
+			]
+		},
+		"lan": {
+			".anonymous": false,
+			".type": "interface",
+			".name": "lan",
+			".index": 3,
+			"device": "br-lan",
+			"proto": "static",
+			"ip6assign": "60",
+			"ipaddr": [
+				"192.168.0.2/24"
+			],
+			"gateway": "192.168.0.1",
+			"dns": [
+				"192.168.0.1"
+			]
+		},
+		"tailscale": {
+			".anonymous": false,
+			".type": "interface",
+			".name": "tailscale",
+			".index": 4,
+			"proto": "none",
+			"device": "tailscale0"
+		}
+	}
+}
