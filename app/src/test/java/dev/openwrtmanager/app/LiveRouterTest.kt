@@ -7,6 +7,7 @@ import dev.openwrtmanager.app.ssh.SshTarget
 import dev.openwrtmanager.app.ssh.SshjExecutor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -60,6 +61,56 @@ class LiveRouterTest {
                 println(
                     "LIVE $host: firmware='${info.firmware}' uplink=$uplink wifi=${wifi.size} " +
                         "clients=${wifi.sumOf { it.clientCount }} leases=$leases rate=$rateText",
+                )
+            } finally {
+                ssh.close()
+            }
+        }
+    }
+
+    /** Phase 2 reads: config snapshots, the Wi-Fi model, and what the guest wizard would do. Nothing is staged. */
+    @Test
+    fun wifi_config_and_wizard_planning_work_on_real_routers() = runBlocking<Unit> {
+        val hosts = System.getenv("OWM_LIVE_HOSTS")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+        val keyPath = System.getenv("OWM_LIVE_KEY").orEmpty()
+        assumeTrue("live router test not configured", hosts.isNotEmpty() && keyPath.isNotEmpty())
+        val key = File(keyPath).readText()
+
+        for (host in hosts) {
+            val fingerprint = SshjExecutor.probeFingerprint(host, 22)
+            val ssh = SshjExecutor(SshTarget(host, 22, "root", AuthType.KEY, key, fingerprint))
+            try {
+                val gateway = dev.openwrtmanager.app.wifi.SshWifiGateway(ssh)
+                val snapshot = gateway.snapshot()
+                val wifi = dev.openwrtmanager.app.wifi.wifiConfigOf(snapshot.wireless)
+                assertTrue("radios on $host", wifi.radios.isNotEmpty())
+                assertTrue("groups on $host", wifi.groups.isNotEmpty())
+                assertTrue("known security on $host", wifi.ifaces.all { it.security != null })
+                assertTrue("network config on $host", snapshot.network["lan"] != null)
+                assertTrue("firewall zones on $host", snapshot.firewall.ofType("zone").isNotEmpty())
+                val usteer = gateway.usteerStatus()
+
+                val input = dev.openwrtmanager.app.wifi.WizardInput(
+                    dev.openwrtmanager.app.wifi.WizardKind.GUEST, "Live-Test-Guest",
+                    dev.openwrtmanager.app.wifi.Security.WPA2_WPA3, "not-a-real-password",
+                    wifi.radios.map { it.name }.toSet(),
+                )
+                val plan = dev.openwrtmanager.app.wifi.NetworkWizard.plan(snapshot, input)
+                val planText = when (plan) {
+                    is dev.openwrtmanager.app.wifi.WizardPlan.Ready ->
+                        "READY name=${plan.networkName} subnet=${plan.subnet} lines=${plan.change.batch.script().lines().size}"
+                    is dev.openwrtmanager.app.wifi.WizardPlan.Blocked -> "BLOCKED ${plan.reason}"
+                }
+                assertEquals(
+                    "a device with an uplink can host a guest network, one without cannot",
+                    snapshot.hasUplink,
+                    plan is dev.openwrtmanager.app.wifi.WizardPlan.Ready,
+                )
+                assertEquals("nothing was staged on $host", "", dev.openwrtmanager.app.uci.UciClient(ssh).pendingChanges())
+                println(
+                    "LIVE2 $host: radios=${wifi.radios.map { it.band }} groups=${wifi.groups.size} " +
+                        "assist=${wifi.groups.map { it.steeringAssist }} used=${snapshot.usedSubnets} uplink=${snapshot.hasUplink} " +
+                        "usteer=$usteer wizard=$planText",
                 )
             } finally {
                 ssh.close()
