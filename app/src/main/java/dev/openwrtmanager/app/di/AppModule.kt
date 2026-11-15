@@ -141,3 +141,21 @@ object ApplyModule {
         dev.openwrtmanager.app.ui.apply.ApplySession(dev.openwrtmanager.app.apply.SafeApply(executor, time)) { executor.close() }
     }
 }
+
+@Module
+@InstallIn(SingletonComponent::class)
+object WifiModule {
+    @Provides
+    fun wifiGatewayProvider(
+        connection: dev.openwrtmanager.app.connection.ConnectionManager,
+    ): dev.openwrtmanager.app.wifi.WifiGatewayProvider = dev.openwrtmanager.app.wifi.WifiGatewayProvider {
+        (connection.state.value as? dev.openwrtmanager.app.connection.ConnectionState.Online)
+            ?.let { dev.openwrtmanager.app.wifi.SshWifiGateway(it.ssh) }
+    }
+
+    @Provides
+    fun passwordSource(): dev.openwrtmanager.app.ui.wifi.PasswordSource {
+        val random = java.security.SecureRandom()
+        return dev.openwrtmanager.app.ui.wifi.PasswordSource { dev.openwrtmanager.app.ui.wifi.generateWifiPassword(random) }
+    }
+}

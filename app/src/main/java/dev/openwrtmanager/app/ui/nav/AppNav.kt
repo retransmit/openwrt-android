@@ -48,6 +48,10 @@ import dev.openwrtmanager.app.ui.devices.DevicesScreen
 import dev.openwrtmanager.app.ui.devices.DevicesViewModel
 import dev.openwrtmanager.app.ui.devices.EditDeviceScreen
 import dev.openwrtmanager.app.ui.home.HomeScreen
+import dev.openwrtmanager.app.ui.wifi.NetworkEditScreen
+import dev.openwrtmanager.app.ui.wifi.WifiScreen
+import dev.openwrtmanager.app.ui.wifi.WizardScreen
+import dev.openwrtmanager.app.wifi.WizardKind
 
 private const val ROUTE_MAIN = "main"
 private const val ROUTE_DEVICES = "devices"
@@ -72,7 +76,23 @@ fun AppNav() {
             MainTabs(
                 onManageDevices = { nav.navigate(ROUTE_DEVICES) },
                 onAddDevice = { nav.navigate(editRoute(null)) },
+                onEditNetwork = { section -> nav.navigate("wifi/network?section=${section.orEmpty()}") },
+                onWizard = { kind -> nav.navigate("wifi/wizard/${kind.name}") },
             )
+        }
+        composable(
+            "wifi/network?section={section}",
+            arguments = listOf(navArgument("section") { type = NavType.StringType; defaultValue = "" }),
+        ) { entry ->
+            NetworkEditScreen(
+                section = entry.arguments?.getString("section")?.takeIf { it.isNotEmpty() },
+                onDone = { nav.popBackStack() },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable("wifi/wizard/{kind}") { entry ->
+            val kind = runCatching { WizardKind.valueOf(entry.arguments?.getString("kind").orEmpty()) }.getOrDefault(WizardKind.GUEST)
+            WizardScreen(kind = kind, onDone = { nav.popBackStack() }, onBack = { nav.popBackStack() })
         }
         composable(ROUTE_DEVICES) {
             DevicesScreen(
@@ -100,7 +120,12 @@ fun AppNav() {
 }
 
 @Composable
-private fun MainTabs(onManageDevices: () -> Unit, onAddDevice: () -> Unit) {
+private fun MainTabs(
+    onManageDevices: () -> Unit,
+    onAddDevice: () -> Unit,
+    onEditNetwork: (String?) -> Unit,
+    onWizard: (WizardKind) -> Unit,
+) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var switcherOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -118,6 +143,7 @@ private fun MainTabs(onManageDevices: () -> Unit, onAddDevice: () -> Unit) {
     ) {
         when (tab) {
             Tab.HOME -> HomeScreen(onSwitchDevice = { switcherOpen = true }, onAddDevice = onAddDevice)
+            Tab.WIFI -> WifiScreen(onEditNetwork = onEditNetwork, onWizard = onWizard)
             else -> ComingLater(tab)
         }
     }
