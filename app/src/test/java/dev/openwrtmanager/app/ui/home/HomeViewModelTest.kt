@@ -249,4 +249,46 @@ class HomeViewModelTest {
         runCurrent()
         assertTrue(vm.ui.value.status is HomeStatus.Offline)
     }
+
+    @Test
+    fun client_total_is_unknown_when_nothing_could_be_read() = runTest(dispatcher) {
+        router.respond(CMD_LEASES, "", exitCode = 1)
+        router.respond("ubus call network.wireless status", "", exitCode = 4, stderr = "Command failed")
+        addProfile()
+        val vm = start()
+        runCurrent()
+        assertNull(vm.ui.value.clientTotal)
+    }
+
+    @Test
+    fun one_failed_uplink_read_keeps_the_graph() = runTest(dispatcher) {
+        counters(1_000, 500)
+        addProfile()
+        val vm = start()
+        runCurrent()
+        counters(3_000, 1_500)
+        advanceTimeBy(2_000)
+        runCurrent()
+        router.respond(CMD_IFACES, "<garbage>")
+        advanceTimeBy(8_000)
+        runCurrent()
+        assertTrue(vm.ui.value.uplinkPresent)
+        assertTrue(vm.ui.value.history.isNotEmpty())
+    }
+
+    @Test
+    fun offline_messages_distinguish_the_cause() {
+        val unreachable = offlineMessage(SshError.Unreachable())
+        val titles = listOf(
+            SshError.AuthFailed(),
+            SshError.HostKeyChanged("a", "b"),
+            SshError.Timeout(),
+            dev.openwrtmanager.app.router.RouterError.NotOpenWrt(),
+            dev.openwrtmanager.app.router.RouterError.BadResponse("x"),
+            dev.openwrtmanager.app.router.RouterError.CommandFailed("x", "denied"),
+        ).map { offlineMessage(it).title }
+        assertEquals("each cause has its own title", titles.size, titles.toSet().size)
+        assertFalse(unreachable.title in titles)
+        assertEquals(offlineMessage(SshError.Disconnected()).title, unreachable.title)
+    }
 }

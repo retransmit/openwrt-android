@@ -305,4 +305,51 @@ class EditDeviceViewModelTest {
         assertTrue(savedProfiles().isEmpty())
         assertTrue(executors.all { it.closed })
     }
+
+    @Test
+    fun form_state_never_prints_the_password() = runTest {
+        val vm = viewModel()
+        vm.load(null)
+        vm.fill(secret = "hunter2")
+        assertFalse(vm.ui.value.toString().contains("hunter2"))
+    }
+
+    @Test
+    fun editing_a_device_that_is_not_active_leaves_the_active_one_alone() = runTest {
+        val edited = existingProfile()
+        val other = profiles.save(Profile(name = "Other", host = "10.0.0.9", authType = AuthType.PASSWORD))
+        profiles.setActive(other)
+        val vm = viewModel()
+        vm.load(edited)
+        vm.onName("Renamed")
+        vm.testAndSave()
+        assertEquals("Renamed", profiles.get(edited)!!.name)
+        assertEquals(other, profiles.observeActiveId().first())
+    }
+
+    @Test
+    fun failed_key_verification_removes_the_key_line_from_the_router() = runTest {
+        keyLoginWorks = false
+        val vm = viewModel()
+        vm.load(null)
+        vm.fill()
+        vm.testAndSave()
+        vm.acceptHostKey()
+        vm.setUpKey()
+        val cleanup = "f=/etc/dropbear/authorized_keys; grep -vxF 'ssh-ed25519 AAAAC3 openwrt-manager' \"\$f\" > \"\$f.owm\";" +
+            " cat \"\$f.owm\" > \"\$f\"; rm -f \"\$f.owm\""
+        assertTrue(executors.any { cleanup in it.commands })
+        assertTrue(executors.all { it.closed })
+    }
+
+    @Test
+    fun key_setup_is_only_offered_for_root() = runTest {
+        val vm = viewModel()
+        vm.load(null)
+        vm.fill()
+        vm.onUsername("admin")
+        vm.testAndSave()
+        vm.acceptHostKey()
+        assertEquals(Step.Saved(keyInstalled = false, keySetupFailed = false), vm.step)
+    }
 }

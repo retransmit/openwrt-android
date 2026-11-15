@@ -78,6 +78,8 @@ class SshjExecutor(private val target: SshTarget) : SshExecutor {
         try {
             fresh.connect(target.host, target.port)
             authenticate(fresh)
+            // Connected: from here keep-alive detects a dead peer, and idle periods must not time out.
+            fresh.socket.soTimeout = 0
         } catch (e: UserAuthException) {
             fresh.quietDisconnect()
             throw SshError.AuthFailed()
@@ -179,6 +181,8 @@ class SshjExecutor(private val target: SshTarget) : SshExecutor {
             val config = DefaultConfig().apply { keepAliveProvider = KeepAliveProvider.KEEP_ALIVE }
             return SSHClient(config).apply {
                 connectTimeout = CONNECT_TIMEOUT_MS
+                // Also bounds the handshake, so a host that accepts the connection but never speaks cannot hang us.
+                timeout = CONNECT_TIMEOUT_MS
                 addHostKeyVerifier(policy)
                 connection.keepAlive.keepAliveInterval = KEEP_ALIVE_SECONDS
             }

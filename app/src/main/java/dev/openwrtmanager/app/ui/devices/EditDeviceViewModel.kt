@@ -15,6 +15,8 @@ import dev.openwrtmanager.app.ssh.SshError
 import dev.openwrtmanager.app.ssh.SshTarget
 import dev.openwrtmanager.app.ssh.shellQuote
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,7 +57,10 @@ data class EditDeviceUi(
     val portError: Boolean = false,
     val secretError: Boolean = false,
     val step: Step = Step.Editing,
-)
+) {
+    /** The typed password must never end up in a log line or crash report. */
+    override fun toString(): String = "EditDeviceUi(name=$name, host=$host, port=$port, step=$step)"
+}
 
 @HiltViewModel
 class EditDeviceViewModel @Inject constructor(
@@ -183,13 +188,19 @@ class EditDeviceViewModel @Inject constructor(
             setStep(Step.Failed(reasonOf(error)))
             return
         }
-        // For an existing profile the secret goes in first, so a reconnect triggered by the save sees it.
-        if (candidate.id != 0L) secrets.put(candidate.id, secret)
-        val id = profiles.save(candidate)
-        secrets.put(id, secret)
-        profiles.setActive(id)
+        // The secret and the profile row must land together, even if the user leaves the screen mid-save.
+        val id = withContext(NonCancellable) {
+            // For an existing profile the secret goes in first, so a reconnect triggered by the save sees it.
+            if (candidate.id != 0L) secrets.put(candidate.id, secret)
+            val savedId = profiles.save(candidate)
+            secrets.put(savedId, secret)
+            // A new device becomes the current one. Editing a device does not change which one is current.
+            if (previous == null) profiles.setActive(savedId)
+            savedId
+        }
         stored = candidate.copy(id = id)
-        val offerKey = previous == null && authType == AuthType.PASSWORD
+        // Key setup writes to dropbear's key file for root, so it is only offered for the root user.
+        val offerKey = previous == null && authType == AuthType.PASSWORD && candidate.username == "root"
         setStep(if (offerKey) Step.OfferKeySetup else Step.Saved(keyInstalled = false, keySetupFailed = false))
     }
 
@@ -200,22 +211,38 @@ class EditDeviceViewModel @Inject constructor(
         val command = "mkdir -p /etc/dropbear && echo ${shellQuote(key.publicOpenSsh)} >> /etc/dropbear/authorized_keys" +
             " && chmod 600 /etc/dropbear/authorized_keys"
         val executor = executorFactory.create(profile.toTarget(password))
-        val appended = try {
-            executor.exec(command).exitCode == 0
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            false
+        try {
+            val appended = try {
+                executor.exec(command).exitCode == 0
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                false
+            }
+            if (!appended) return false
+            val keyProfile = profile.copy(authType = AuthType.KEY)
+            if (check(keyProfile.toTarget(key.privatePem)) != null) {
+                // The key does not log in, so take its line back out rather than leave it behind.
+                val cleanup = "f=/etc/dropbear/authorized_keys; grep -vxF ${shellQuote(key.publicOpenSsh)} \"\$f\" > \"\$f.owm\";" +
+                    " cat \"\$f.owm\" > \"\$f\"; rm -f \"\$f.owm\""
+                try {
+                    executor.exec(cleanup)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Best effort: the unused line is harmless, the private half was never stored.
+                }
+                return false
+            }
+            withContext(NonCancellable) {
+                secrets.put(profile.id, key.privatePem)
+                profiles.save(keyProfile)
+            }
+            stored = keyProfile
+            return true
         } finally {
-            executor.close()
+            withContext(NonCancellable) { executor.close() }
         }
-        if (!appended) return false
-        val keyProfile = profile.copy(authType = AuthType.KEY)
-        if (check(keyProfile.toTarget(key.privatePem)) != null) return false
-        secrets.put(profile.id, key.privatePem)
-        profiles.save(keyProfile)
-        stored = keyProfile
-        return true
     }
 
     /** Connects and confirms the device answers like OpenWrt. Returns what went wrong, or null. */

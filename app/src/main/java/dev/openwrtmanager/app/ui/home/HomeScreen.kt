@@ -62,7 +62,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.openwrtmanager.app.domain.Band
 import dev.openwrtmanager.app.domain.Rate
 import dev.openwrtmanager.app.domain.SystemInfo
-import dev.openwrtmanager.app.router.RouterError
 import dev.openwrtmanager.app.ssh.SshError
 import dev.openwrtmanager.app.ui.common.formatRate
 import dev.openwrtmanager.app.ui.common.formatUptime
@@ -335,14 +334,7 @@ private fun SystemFooter(system: SystemInfo) {
 
 @Composable
 private fun OfflineCard(error: Throwable, onRetry: () -> Unit) {
-    val (title, detail) = when (error) {
-        is SshError.AuthFailed -> "Login was refused" to "The saved password or key no longer works. Edit the device to fix it."
-        is SshError.HostKeyChanged -> "This device's identity has changed" to
-            "The app stopped connecting to be safe. Edit the device and test it again to review the new fingerprint."
-        is SshError.HostKeyUnknown -> "This device is not trusted yet" to "Edit the device and test it to confirm its fingerprint."
-        is RouterError.NotOpenWrt -> "This does not look like OpenWrt" to "The device has no ubus command."
-        else -> "Cannot reach the device" to "Trying again automatically. Check that this phone is on the right network."
-    }
+    val (title, detail) = offlineMessage(error)
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
         modifier = Modifier.fillMaxWidth(),
