@@ -34,6 +34,7 @@ class EditDeviceViewModelTest {
     private var goodPassword = "hunter2"
     private var keyLoginWorks = true
     private var isOpenWrt = true
+    private var crash: RuntimeException? = null
     private val generated = GeneratedKey("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n", "ssh-ed25519 AAAAC3 openwrt-manager")
 
     private val installCommand =
@@ -55,6 +56,7 @@ class EditDeviceViewModelTest {
             if (target.trustedFingerprint != serverFingerprint) {
                 executor.failWith = SshError.HostKeyChanged(target.trustedFingerprint ?: "", serverFingerprint)
             }
+            executor.crashWith = crash
             executors += executor
             executor
         },
@@ -289,5 +291,18 @@ class EditDeviceViewModelTest {
         vm.skipKeySetup()
         assertEquals(Step.Saved(keyInstalled = false, keySetupFailed = false), vm.step)
         assertNull(secrets.get(99))
+    }
+
+    @Test
+    fun unexpected_exception_during_the_check_fails_cleanly() = runTest {
+        crash = IllegalStateException("unexpected")
+        val vm = viewModel()
+        vm.load(null)
+        vm.fill()
+        vm.testAndSave()
+        vm.acceptHostKey()
+        assertEquals(Step.Failed(FailReason.OTHER), vm.step)
+        assertTrue(savedProfiles().isEmpty())
+        assertTrue(executors.all { it.closed })
     }
 }

@@ -17,7 +17,7 @@ import org.junit.Test
 
 class RouterClientTest {
     private val fake = healthyRouter()
-    private val client = RouterClient(fake, clock = { 1000 })
+    private val client = RouterClient(fake)
 
     @Test
     fun systemInfo_maps_fields() = runTest {
@@ -78,7 +78,7 @@ class RouterClientTest {
     fun leaseCount_skips_expired() = runTest {
         fake.respond(
             CMD_LEASES,
-            "900 aa:bb:cc:00:00:01 192.168.1.10 old *\n" +
+            "1000\n900 aa:bb:cc:00:00:01 192.168.1.10 old *\n" +
                 "2000 aa:bb:cc:00:00:02 192.168.1.11 phone 01:aa\n" +
                 "0 aa:bb:cc:00:00:03 192.168.1.12 static *\n",
         )
@@ -106,5 +106,25 @@ class RouterClientTest {
     fun other_failure_is_command_failed() = runTest {
         fake.respond(CMD_BOARD, "", exitCode = 4, stderr = "Command failed: Permission denied")
         client.systemInfo()
+    }
+
+    @Test
+    fun uplink_ignores_a_default_route_on_a_network_wifi_clients_join() = runTest {
+        // A plain access point reaches the internet through its LAN. That is not an internet link to graph.
+        fake.respond(CMD_IFACES, Fixtures.read("iface_dump_dumb_ap.json"))
+        assertNull(client.uplinkDevice())
+    }
+
+    @Test
+    fun leases_use_the_router_clock_not_the_phone_clock() = runTest {
+        // A router without time sync sits near 1970; the phone's clock would call every lease expired.
+        fake.respond(CMD_LEASES, "50\n43250 aa:bb:cc:00:00:01 192.168.1.10 phone *\n40 aa:bb:cc:00:00:02 192.168.1.11 old *\n")
+        assertEquals(1, client.leaseCount())
+    }
+
+    @Test
+    fun leaseCount_null_when_router_time_is_unreadable() = runTest {
+        fake.respond(CMD_LEASES, "sh: date: not found\n")
+        assertNull(client.leaseCount())
     }
 }

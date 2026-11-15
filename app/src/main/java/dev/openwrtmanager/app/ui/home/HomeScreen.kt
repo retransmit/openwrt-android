@@ -207,7 +207,7 @@ private fun NoUplinkCard() {
             Column {
                 Text("No internet connection detected", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "This device has no default route right now, so there is no link speed to show.",
+                    "This device is not routing an internet connection right now (for example it is an access point, or the WAN is down), so there is no link speed to show.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

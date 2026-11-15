@@ -9,6 +9,9 @@ class FakeSshExecutor(
 ) : SshExecutor {
     val commands = mutableListOf<String>()
     var failWith: SshError? = null
+
+    /** Simulates a bug or platform failure that is not a transport error. */
+    var crashWith: RuntimeException? = null
     var closed = false
 
     fun respond(command: String, stdout: String, exitCode: Int = 0, stderr: String = "") {
@@ -17,6 +20,7 @@ class FakeSshExecutor(
 
     override suspend fun exec(command: String, timeoutMs: Long): ExecResult {
         failWith?.let { throw it }
+        crashWith?.let { throw it }
         commands += command
         return responses[command] ?: ExecResult(127, "", "not found")
     }

@@ -70,6 +70,7 @@ internal data class WifiIfaceConfigDto(
     val mode: String = "",
     val ssid: String = "",
     val encryption: String = "none",
+    val network: List<String> = emptyList(),
 )
 
 @Serializable

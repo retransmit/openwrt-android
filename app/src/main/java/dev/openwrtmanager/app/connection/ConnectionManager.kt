@@ -84,7 +84,10 @@ class ConnectionManager(
                 _state.value = ConnectionState.NoProfile
                 return
             }
-            val error = connectAndHold(profile)
+            val ended = connectAndHold(profile)
+            // A connection that worked means the device is reachable again: the next drop starts at the short delay.
+            if (ended.wasOnline) failedAttempts = 0
+            val error = ended.error
             if (error == null) {
                 // retryNow while online: reconnect straight away.
                 failedAttempts = 0
@@ -106,10 +109,16 @@ class ConnectionManager(
      * Connects, then suspends while the connection is in use. Returns the error that ended it,
      * or null when the user asked for a reconnect.
      */
-    private suspend fun connectAndHold(profile: Profile): Throwable? {
+    private suspend fun connectAndHold(profile: Profile): Ended {
         _state.value = ConnectionState.Connecting(profile)
         yield()
-        val secret = secrets.get(profile.id) ?: return SshError.AuthFailed()
+        val secret = try {
+            secrets.get(profile.id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return Ended(e, wasOnline = false)
+        } ?: return Ended(SshError.AuthFailed(), wasOnline = false)
         val executor = executorFactory.create(
             SshTarget(
                 host = profile.host,
@@ -123,7 +132,7 @@ class ConnectionManager(
         try {
             val router = RouterClient(executor)
             var wasOnline = false
-            return try {
+            val error = try {
                 router.systemInfo()
                 wasOnline = true
                 _state.value = ConnectionState.Online(profile, router)
@@ -133,15 +142,19 @@ class ConnectionManager(
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: SshError) {
+            } catch (e: Exception) {
+                // Anything unexpected is shown as Offline and retried; it must never take the app down.
                 e
-            } catch (e: RouterError) {
-                e
-            }.also { if (!wasOnline) failures.tryReceive() }
+            }
+            if (!wasOnline) failures.tryReceive()
+            return Ended(error, wasOnline)
         } finally {
             withContext(NonCancellable) { runCatching { executor.close() } }
         }
     }
+
+    /** How a connection attempt ended. [error] is null when the user asked for a reconnect. */
+    private class Ended(val error: Throwable?, val wasOnline: Boolean)
 
     private fun Throwable.isRetryable(): Boolean = when (this) {
         is SshError.AuthFailed, is SshError.HostKeyChanged, is SshError.HostKeyUnknown -> false

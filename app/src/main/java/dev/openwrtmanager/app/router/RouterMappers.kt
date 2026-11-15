@@ -13,10 +13,19 @@ internal fun toSystemInfo(board: BoardDto, info: InfoDto): SystemInfo = SystemIn
     memAvailableBytes = info.memory.available ?: (info.memory.free + info.memory.buffered),
 )
 
-internal fun InterfaceDumpDto.uplinkDevice(): String? =
+/**
+ * The device carrying the IPv4 default route, unless that route sits on a network Wi-Fi clients join.
+ * A plain access point reaches the internet through its LAN; its bridge counters only show the
+ * access point's own traffic, so that is not an internet link worth graphing.
+ */
+internal fun InterfaceDumpDto.uplinkDevice(clientNetworks: Set<String>): String? =
     interfaces.firstOrNull { iface ->
-        iface.up && iface.route.any { it.target == "0.0.0.0" && it.mask == 0 }
+        iface.up && iface.name !in clientNetworks && iface.route.any { it.target == "0.0.0.0" && it.mask == 0 }
     }?.l3Device
+
+/** Names of the networks that access point interfaces are attached to. */
+internal fun Map<String, RadioDto>.clientNetworks(): Set<String> =
+    values.flatMap { radio -> radio.interfaces.filter { it.config.mode == "ap" }.flatMap { it.config.network } }.toSet()
 
 internal fun RadioConfigDto.toBand(): Band = when {
     band == "2g" -> Band.GHZ_2_4
@@ -28,9 +37,18 @@ internal fun RadioConfigDto.toBand(): Band = when {
     else -> Band.GHZ_2_4
 }
 
-/** Counts unexpired leases in dnsmasq's lease file. The first field is the expiry epoch; 0 means never. */
-internal fun countActiveLeases(leaseFile: String, nowSeconds: Long): Int =
-    leaseFile.lineSequence().count { line ->
-        val expiry = line.trim().substringBefore(' ').toLongOrNull() ?: return@count false
-        expiry == 0L || expiry > nowSeconds
+/**
+ * Counts unexpired leases. [output] is the router's own clock in epoch seconds on the first line,
+ * then dnsmasq's lease file, whose first field per line is the expiry (0 means never).
+ * Returns null when the clock line is unreadable.
+ */
+internal fun countActiveLeases(output: String): Int? {
+    val lines = output.lineSequence().iterator()
+    val now = (if (lines.hasNext()) lines.next() else "").trim().toLongOrNull() ?: return null
+    var count = 0
+    for (line in lines) {
+        val expiry = line.trim().substringBefore(' ').toLongOrNull() ?: continue
+        if (expiry == 0L || expiry > now) count++
     }
+    return count
+}

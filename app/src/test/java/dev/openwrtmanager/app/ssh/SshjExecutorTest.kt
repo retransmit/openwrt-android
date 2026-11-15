@@ -1,7 +1,11 @@
 package dev.openwrtmanager.app.ssh
 
 import dev.openwrtmanager.app.data.AuthType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.apache.sshd.common.config.keys.KeyUtils
 import org.apache.sshd.common.config.keys.PublicKeyEntry
 import org.apache.sshd.server.Environment
@@ -125,7 +129,6 @@ class SshjExecutorTest {
         val closedPort = ServerSocket(0).use { it.localPort }
         expect<SshError.Unreachable> { executor(onPort = closedPort).exec("hello") }
         expect<SshError.Unreachable> { SshjExecutor.probeFingerprint("127.0.0.1", closedPort) }
-        Unit
     }
 
     @Test
@@ -156,6 +159,22 @@ class SshjExecutorTest {
         } catch (e: SshError) {
             assertTrue(e is SshError.Disconnected || e is SshError.Unreachable)
         }
+    }
+
+    @Test
+    fun cancelling_a_running_command_returns_promptly_and_frees_the_executor() = runBlocking<Unit> {
+        val ssh = executor()
+        ssh.exec("hello")
+        val started = System.nanoTime()
+        val job = launch(Dispatchers.Default) { ssh.exec("sleep", timeoutMs = 30_000) }
+        delay(300)
+        job.cancel()
+        job.join()
+        // The server keeps the command running for 5 s; the caller and the next command must not wait for it.
+        val result = withTimeout(2_000) { ssh.exec("hello") }
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+        assertEquals(0, result.exitCode)
+        assertTrue("took $elapsedMs ms", elapsedMs < 3_000)
     }
 
     private inline fun <reified E : SshError> expect(block: () -> Any?): E {

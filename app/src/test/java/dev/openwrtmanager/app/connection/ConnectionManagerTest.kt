@@ -39,6 +39,7 @@ class ConnectionManagerTest {
             val executor = when (failure) {
                 null -> healthyRouter()
                 is SshError -> healthyRouter().apply { failWith = failure }
+                is UnsupportedOperationException -> healthyRouter().apply { crashWith = failure }
                 else -> FakeSshExecutor() // answers 127 to everything: not an OpenWrt device
             }
             created += executor
@@ -236,5 +237,36 @@ class ConnectionManagerTest {
         profiles.save(profiles.get(other)!!.copy(host = "10.9.9.9"))
         runCurrent()
         assertEquals(1, created.size)
+    }
+
+    @Test
+    fun backoff_starts_over_after_a_successful_connection() = runTest {
+        repeat(3) { upcomingFailures += SshError.Unreachable() }
+        val manager = manager()
+        addProfile("1")
+        runCurrent()
+        advanceTimeBy(2_000); runCurrent()
+        advanceTimeBy(4_000); runCurrent()
+        advanceTimeBy(8_000); runCurrent()
+        assertTrue(manager.state.value is ConnectionState.Online)
+        manager.reportFailure(SshError.Disconnected())
+        runCurrent()
+        assertTrue(manager.state.value is ConnectionState.Offline)
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertTrue("reconnects after 2 s, not 15 s", manager.state.value is ConnectionState.Online)
+    }
+
+    @Test
+    fun unexpected_exception_goes_offline_and_retries_instead_of_crashing() = runTest {
+        upcomingFailures += UnsupportedOperationException("keystore exploded")
+        val manager = manager()
+        addProfile("1")
+        runCurrent()
+        assertTrue(manager.offline().error is UnsupportedOperationException)
+        assertTrue(created[0].closed)
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertTrue(manager.state.value is ConnectionState.Online)
     }
 }
