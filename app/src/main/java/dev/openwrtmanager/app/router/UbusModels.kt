@@ -38,6 +38,7 @@ internal data class InterfaceDto(
     val up: Boolean = false,
     @SerialName("l3_device") val l3Device: String? = null,
     val route: List<RouteDto> = emptyList(),
+    @SerialName("ipv4-address") val ipv4: List<AddressDto> = emptyList(),
 )
 
 @Serializable
@@ -75,3 +76,6 @@ internal data class WifiIfaceConfigDto(
 
 @Serializable
 internal data class HostapdClientsDto(val clients: JsonObject = JsonObject(emptyMap()))
+
+@Serializable
+internal data class AddressDto(val address: String = "", val mask: Int = -1)

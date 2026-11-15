@@ -39,6 +39,12 @@ class RouterClient(private val ssh: SshExecutor) {
         return dump.uplinkDevice(clientNetworks)
     }
 
+    /** IPv4 ranges already in use on this device, as CIDR strings, one per configured address. */
+    suspend fun usedSubnets(): List<String> =
+        ubus("ubus call network.interface dump", InterfaceDumpDto.serializer()).interfaces
+            .flatMap { it.ipv4 }
+            .mapNotNull { dev.openwrtmanager.app.wifi.networkOf(it.address, it.mask) }
+
     private suspend fun radios(): Map<String, RadioDto> =
         ubus("ubus call network.wireless status", MapSerializer(String.serializer(), RadioDto.serializer()))
 
