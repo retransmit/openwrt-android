@@ -67,7 +67,12 @@ data class WifiGroup(val ssid: String, val ifaces: List<WifiIface>, val bands: L
     override fun toString(): String = "WifiGroup($ssid, ${ifaces.map { it.section }})"
 }
 
-data class WifiConfig(val radios: List<Radio>, val ifaces: List<WifiIface>) {
+data class WifiConfig(
+    val radios: List<Radio>,
+    val ifaces: List<WifiIface>,
+    /** Every section name in the wireless config, so new sections never reuse one. */
+    val sectionNames: Set<String> = emptySet(),
+) {
     val groups: List<WifiGroup> by lazy {
         ifaces.groupBy { GroupKey(it.ssid, it.rawEncryption, it.key, it.network) }.map { (key, members) ->
             val bands = members.mapNotNull { iface -> radios.firstOrNull { it.name == iface.radio }?.band }
@@ -127,5 +132,12 @@ fun wifiConfigOf(wireless: UciConfig): WifiConfig {
                 ieee80211r = section.flag("ieee80211r"),
             )
         }
-    return WifiConfig(radios, ifaces)
+    return WifiConfig(radios, ifaces, wireless.sections.map { it.name }.toSet())
+}
+
+fun Band.label(): String = when (this) {
+    Band.GHZ_2_4 -> "2.4 GHz"
+    Band.GHZ_5 -> "5 GHz"
+    Band.GHZ_6 -> "6 GHz"
+    Band.UNKNOWN -> "Wi-Fi"
 }
