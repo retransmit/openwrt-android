@@ -41,21 +41,25 @@ class LiveRouterTest {
                 val wifi = router.wifiNetworks()
                 assertTrue("wifi on $host", wifi.isNotEmpty() && wifi.all { it.ssid.isNotEmpty() })
 
+                // Null is a valid answer: an access point has no internet-facing interface of its own.
                 val uplink = router.uplinkDevice()
-                assertNotNull("uplink on $host", uplink)
-                val sampler = RateSampler()
-                val first = router.counters(uplink!!)
-                assertTrue("counters on $host", first.rxBytes > 0 && first.txBytes > 0)
-                sampler.sample(first, 0)
-                delay(1_000)
-                val rate = sampler.sample(router.counters(uplink), 1_000)
-                assertNotNull(rate)
+                var rateText = "none"
+                if (uplink != null) {
+                    val sampler = RateSampler()
+                    val first = router.counters(uplink)
+                    assertTrue("counters on $host", first.rxBytes > 0 && first.txBytes > 0)
+                    sampler.sample(first, 0)
+                    delay(1_000)
+                    val rate = sampler.sample(router.counters(uplink), 1_000)
+                    assertNotNull(rate)
+                    rateText = "down=${rate!!.downBps}bps up=${rate.upBps}bps"
+                }
 
                 val leases = router.leaseCount()
+                assertNotNull("lease count on $host", leases)
                 println(
-                    "LIVE $host: model='${info.model}' firmware='${info.firmware}' uplink=$uplink " +
-                        "wifi=${wifi.size} clients=${wifi.sumOf { it.clientCount }} leases=$leases " +
-                        "down=${rate!!.downBps}bps up=${rate.upBps}bps",
+                    "LIVE $host: firmware='${info.firmware}' uplink=$uplink wifi=${wifi.size} " +
+                        "clients=${wifi.sumOf { it.clientCount }} leases=$leases rate=$rateText",
                 )
             } finally {
                 ssh.close()

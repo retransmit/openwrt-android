@@ -10,7 +10,7 @@ const val CMD_BOARD = "ubus call system board"
 const val CMD_INFO = "ubus call system info"
 const val CMD_IFACES = "ubus call network.interface dump"
 const val CMD_WIRELESS = "ubus call network.wireless status"
-const val CMD_LEASES = "cat /tmp/dhcp.leases 2>/dev/null"
+const val CMD_LEASES = "date +%s; cat /tmp/dhcp.leases 2>/dev/null"
 const val CMD_ETH1 = """ubus call network.device status '{"name":"eth1"}'"""
 const val CMD_CLIENTS_AP0 = "ubus call hostapd.phy0-ap0 get_clients"
 

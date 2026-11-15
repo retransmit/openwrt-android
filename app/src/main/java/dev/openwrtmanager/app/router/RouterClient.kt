@@ -19,10 +19,7 @@ sealed class RouterError(message: String) : Exception(message) {
     class BadResponse(val command: String) : RouterError("unparseable response: $command")
 }
 
-class RouterClient(
-    private val ssh: SshExecutor,
-    private val clock: () -> Long = { System.currentTimeMillis() / 1000 },
-) {
+class RouterClient(private val ssh: SshExecutor) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; coerceInputValues = true }
 
     suspend fun systemInfo(): SystemInfo {
@@ -31,9 +28,19 @@ class RouterClient(
         return toSystemInfo(board, info)
     }
 
-    /** Device carrying the IPv4 default route; null when there is none. */
-    suspend fun uplinkDevice(): String? =
-        ubus("ubus call network.interface dump", InterfaceDumpDto.serializer()).uplinkDevice()
+    /** Device of the internet-facing interface; null when there is none (WAN down, or a plain access point). */
+    suspend fun uplinkDevice(): String? {
+        val dump = ubus("ubus call network.interface dump", InterfaceDumpDto.serializer())
+        val clientNetworks = try {
+            radios().clientNetworks()
+        } catch (_: RouterError) {
+            emptySet()
+        }
+        return dump.uplinkDevice(clientNetworks)
+    }
+
+    private suspend fun radios(): Map<String, RadioDto> =
+        ubus("ubus call network.wireless status", MapSerializer(String.serializer(), RadioDto.serializer()))
 
     suspend fun counters(device: String): Counters {
         val arg = buildJsonObject { put("name", JsonPrimitive(device)) }.toString()
@@ -42,11 +49,7 @@ class RouterClient(
     }
 
     suspend fun wifiNetworks(): List<WifiNetwork> {
-        val radios = ubus(
-            "ubus call network.wireless status",
-            MapSerializer(String.serializer(), RadioDto.serializer()),
-        )
-        return radios.values.flatMap { radio ->
+        return radios().values.flatMap { radio ->
             radio.interfaces.filter { it.config.mode == "ap" }.map { iface ->
                 WifiNetwork(
                     ifname = iface.ifname,
@@ -62,9 +65,10 @@ class RouterClient(
 
     /** Unexpired DHCP leases; null when the device runs no DHCP server. */
     suspend fun leaseCount(): Int? {
-        val result = ssh.exec("cat /tmp/dhcp.leases 2>/dev/null")
+        // The router's own clock comes first: lease expiry times are in its time, which may not match the phone's.
+        val result = ssh.exec("date +%s; cat /tmp/dhcp.leases 2>/dev/null")
         if (result.exitCode != 0) return null
-        return countActiveLeases(result.stdout, clock())
+        return countActiveLeases(result.stdout)
     }
 
     /** A missing or failing hostapd object must not break the Wi-Fi list, so this never throws RouterError. */

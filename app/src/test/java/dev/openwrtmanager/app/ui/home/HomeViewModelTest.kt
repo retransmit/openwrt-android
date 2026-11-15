@@ -71,7 +71,7 @@ class HomeViewModelTest {
 
     @Test
     fun online_state_shows_device_system_wifi_and_clients() = runTest(dispatcher) {
-        router.respond(CMD_LEASES, "0 aa 192.168.1.2 a *\n0 bb 192.168.1.3 b *\n0 cc 192.168.1.4 c *\n")
+        router.respond(CMD_LEASES, "1000\n0 aa 192.168.1.2 a *\n0 bb 192.168.1.3 b *\n0 cc 192.168.1.4 c *\n")
         addProfile("Home")
         val vm = start()
         runCurrent()
@@ -232,10 +232,21 @@ class HomeViewModelTest {
     @Test
     fun client_total_is_never_below_connected_wifi_clients() = runTest(dispatcher) {
         // An access point can have an empty lease file while clients are connected over Wi-Fi.
-        router.respond(CMD_LEASES, "")
+        router.respond(CMD_LEASES, "1000\n")
         addProfile()
         val vm = start()
         runCurrent()
         assertEquals(2, vm.ui.value.clientTotal)
+    }
+
+    @Test
+    fun unexpected_exception_while_polling_goes_offline_instead_of_crashing() = runTest(dispatcher) {
+        addProfile()
+        val vm = start()
+        runCurrent()
+        router.crashWith = IllegalStateException("unexpected")
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertTrue(vm.ui.value.status is HomeStatus.Offline)
     }
 }

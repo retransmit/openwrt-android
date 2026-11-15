@@ -12,7 +12,7 @@ import dev.openwrtmanager.app.domain.SystemInfo
 import dev.openwrtmanager.app.domain.WifiNetwork
 import dev.openwrtmanager.app.router.RouterClient
 import dev.openwrtmanager.app.router.RouterError
-import dev.openwrtmanager.app.ssh.SshError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -157,8 +157,11 @@ class HomeViewModel @Inject constructor(
                     }
                 }
             }
-        } catch (e: SshError) {
-            // The transport failed. Stop polling; the manager reconnects and a new session starts.
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The transport failed, or something unexpected happened. Stop polling; the manager
+            // reconnects and a new session starts. Nothing here may crash the app.
             connection.reportFailure(e)
         }
     }

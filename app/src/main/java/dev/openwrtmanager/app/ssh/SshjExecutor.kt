@@ -1,21 +1,23 @@
 package dev.openwrtmanager.app.ssh
 
 import dev.openwrtmanager.app.data.AuthType
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import net.schmizz.keepalive.KeepAliveProvider
 import net.schmizz.sshj.DefaultConfig
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.userauth.UserAuthException
 import java.io.IOException
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 data class SshTarget(
     val host: String,
@@ -105,41 +107,45 @@ class SshjExecutor(private val target: SshTarget) : SshExecutor {
         }
     }
 
-    private suspend fun run(ssh: SSHClient, command: String, timeoutMs: Long): ExecResult =
-        withContext(Dispatchers.IO) {
-            val session = ssh.startSession()
-            val timedOut = AtomicBoolean(false)
-            try {
-                coroutineScope {
-                    // Closing the channel unblocks the stream reads below, so no thread interrupts are needed.
-                    val watchdog = launch {
-                        delay(timeoutMs)
-                        timedOut.set(true)
-                        runCatching { session.close() }
-                    }
-                    try {
-                        val cmd = session.exec(command)
-                        val stderr = async { cmd.errorStream.readBytes() }
-                        val stdout = cmd.inputStream.readBytes()
-                        val stderrBytes = stderr.await()
-                        cmd.join(EXIT_WAIT_SECONDS, TimeUnit.SECONDS)
-                        if (timedOut.get()) throw SshError.Timeout()
-                        ExecResult(
-                            exitCode = cmd.exitStatus ?: -1,
-                            stdout = String(stdout, Charsets.UTF_8),
-                            stderr = String(stderrBytes, Charsets.UTF_8),
-                        )
-                    } catch (e: IOException) {
-                        if (timedOut.get()) throw SshError.Timeout()
-                        throw e
-                    } finally {
-                        watchdog.cancel()
-                    }
-                }
-            } finally {
-                runCatching { session.close() }
-            }
+    /**
+     * The stream reads below block and cannot be cancelled, so they run detached from the caller.
+     * On timeout or cancellation the caller returns at once and the whole transport is closed:
+     * closing the socket is the only thing that reliably unblocks a read when the peer has gone silent.
+     * The next command reconnects.
+     */
+    private suspend fun run(ssh: SSHClient, command: String, timeoutMs: Long): ExecResult {
+        val work = blockingWork.async { execBlocking(ssh, command) }
+        try {
+            return withTimeout(timeoutMs) { work.await() }
+        } catch (e: TimeoutCancellationException) {
+            ssh.quietDisconnect()
+            throw SshError.Timeout()
+        } catch (e: CancellationException) {
+            ssh.quietDisconnect()
+            throw e
+        } catch (e: RuntimeException) {
+            // sshj reports some transport failures as unchecked exceptions.
+            throw IOException(e)
         }
+    }
+
+    private suspend fun execBlocking(ssh: SSHClient, command: String): ExecResult = coroutineScope {
+        val session = ssh.startSession()
+        try {
+            val cmd = session.exec(command)
+            val stderr = async { cmd.errorStream.readBytes() }
+            val stdout = cmd.inputStream.readBytes()
+            val stderrBytes = stderr.await()
+            cmd.join(EXIT_WAIT_SECONDS, TimeUnit.SECONDS)
+            ExecResult(
+                exitCode = cmd.exitStatus ?: -1,
+                stdout = String(stdout, Charsets.UTF_8),
+                stderr = String(stderrBytes, Charsets.UTF_8),
+            )
+        } finally {
+            runCatching { session.close() }
+        }
+    }
 
     private fun drop() {
         client?.quietDisconnect()
@@ -150,6 +156,9 @@ class SshjExecutor(private val target: SshTarget) : SshExecutor {
         private const val CONNECT_TIMEOUT_MS = 8_000
         private const val KEEP_ALIVE_SECONDS = 15
         private const val EXIT_WAIT_SECONDS = 5L
+
+        /** Home for blocking SSH reads that must be able to outlive a cancelled caller for a moment. */
+        private val blockingWork = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         /** Fetches the server's host key fingerprint without authenticating. */
         suspend fun probeFingerprint(host: String, port: Int): String = withContext(Dispatchers.IO) {

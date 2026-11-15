@@ -35,6 +35,9 @@ class KeystoreSecretStore(private val store: DataStore<Preferences>) : SecretSto
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, blob, 0, IV_BYTES))
             String(cipher.doFinal(blob, IV_BYTES, blob.size - IV_BYTES), Charsets.UTF_8)
+        } catch (_: java.security.ProviderException) {
+            // The keystore itself failed (seen on some devices after an OS update); treat the secret as gone.
+            null
         } catch (_: GeneralSecurityException) {
             // The keystore key was lost (for example after a restore to another phone); the secret is gone.
             null

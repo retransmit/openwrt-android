@@ -120,7 +120,9 @@ class EditDeviceViewModel @Inject constructor(
         viewModelScope.launch {
             val fingerprint = try {
                 fingerprintProbe.probe(host, port!!)
-            } catch (e: SshError) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 setStep(Step.Failed(reasonOf(e)))
                 return@launch
             }
@@ -200,7 +202,9 @@ class EditDeviceViewModel @Inject constructor(
         val executor = executorFactory.create(profile.toTarget(password))
         val appended = try {
             executor.exec(command).exitCode == 0
-        } catch (e: SshError) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             false
         } finally {
             executor.close()
@@ -222,9 +226,7 @@ class EditDeviceViewModel @Inject constructor(
             null
         } catch (e: CancellationException) {
             throw e
-        } catch (e: SshError) {
-            e
-        } catch (e: RouterError) {
+        } catch (e: Exception) {
             e
         } finally {
             executor.close()
