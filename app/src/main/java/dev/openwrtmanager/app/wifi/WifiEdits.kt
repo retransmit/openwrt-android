@@ -62,9 +62,8 @@ object WifiEdits {
             batch.delete(W, iface.section)
             summary += "Stop broadcasting $name on ${bandLabel(config, iface.radio)}"
         }
-        val taken = config.sectionNames.toMutableSet()
-        for (radio in edit.radios - group.ifaces.map { it.radio }.toSet()) {
-            newIface(batch, freeName(taken, "wifinet_$radio"), radio, edit, old.network)
+        for ((radio, section) in newSections(config, group, edit.radios)) {
+            newIface(batch, section, radio, edit, old.network)
             summary += "Also broadcast ${quoted(edit.ssid)} on ${bandLabel(config, radio)}"
         }
         return ChangeSet.of("Edit ${quoted(group.ssid)}", summary, batch)
@@ -118,6 +117,14 @@ object WifiEdits {
             summary += if (enabled) "Turn on $name" else "Turn off $name"
         }
         return ChangeSet.of("Edit $name", summary, batch)
+    }
+
+    /** Section names for the radios in [radios] that the group is not on yet, keyed by radio, in config order. */
+    internal fun newSections(config: WifiConfig, group: WifiGroup, radios: Set<String>): Map<String, String> {
+        val taken = config.sectionNames.toMutableSet()
+        val existing = group.ifaces.map { it.radio }.toSet()
+        val ordered = config.radios.map { it.name }.filter { it in radios && it !in existing }
+        return ordered.associateWith { freeName(taken, "wifinet_$it") }
     }
 
     /** Writes a complete new access point section. Shared with the network wizard and steering. */
