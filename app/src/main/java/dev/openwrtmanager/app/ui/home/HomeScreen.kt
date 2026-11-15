@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Wifi
@@ -67,6 +68,7 @@ import dev.openwrtmanager.app.ui.common.formatRate
 import dev.openwrtmanager.app.ui.common.formatUptime
 import dev.openwrtmanager.app.ui.common.memoryUsedPercent
 import dev.openwrtmanager.app.ui.theme.OpenWrtTheme
+import dev.openwrtmanager.app.ui.wifi.QrDialog
 import java.util.Locale
 
 private const val GRAPH_SLOTS = 60
@@ -83,12 +85,20 @@ fun HomeScreen(
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.poll() }
     }
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    HomeContent(ui, onRefresh = viewModel::refresh, onSwitchDevice = onSwitchDevice, onAddDevice = onAddDevice)
+    val qr by viewModel.qr.collectAsStateWithLifecycle()
+    HomeContent(ui, viewModel::refresh, onSwitchDevice, onAddDevice, onShowQr = viewModel::showQr)
+    qr?.let { QrDialog(it.ssid, it.payload, onDismiss = viewModel::dismissQr) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeContent(ui: HomeUi, onRefresh: () -> Unit, onSwitchDevice: () -> Unit, onAddDevice: () -> Unit) {
+fun HomeContent(
+    ui: HomeUi,
+    onRefresh: () -> Unit,
+    onSwitchDevice: () -> Unit,
+    onAddDevice: () -> Unit,
+    onShowQr: (String) -> Unit = {},
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -137,7 +147,7 @@ fun HomeContent(ui: HomeUi, onRefresh: () -> Unit, onSwitchDevice: () -> Unit, o
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         if (ui.uplinkPresent) SpeedCard(ui.rate, ui.history) else NoUplinkCard()
-                        WifiCard(ui.wifi)
+                        WifiCard(ui.wifi, onShowQr)
                         StatsRow(ui)
                         ui.system?.let { SystemFooter(it) }
                     }
@@ -217,7 +227,7 @@ private fun NoUplinkCard() {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun WifiCard(wifi: List<WifiRow>) {
+private fun WifiCard(wifi: List<WifiRow>, onShowQr: (String) -> Unit) {
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(vertical = 16.dp)) {
             Text(
@@ -273,6 +283,9 @@ private fun WifiCard(wifi: List<WifiRow>) {
                                 )
                             }
                         }
+                    }
+                    IconButton(onClick = { onShowQr(row.ssid) }) {
+                        Icon(Icons.Default.QrCode2, contentDescription = "Show join code for ${row.ssid}")
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text("${row.clients}", style = MaterialTheme.typography.titleMedium)

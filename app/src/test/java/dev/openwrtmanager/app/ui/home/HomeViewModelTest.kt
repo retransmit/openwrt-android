@@ -41,6 +41,7 @@ class HomeViewModelTest {
     private val profiles = FakeProfileRepository(secrets)
     private val router = healthyRouter()
     private var connects = 0
+    private val wifiGateway = dev.openwrtmanager.app.testing.FakeWifiGateway()
 
     private fun counters(rx: Long, tx: Long) =
         router.respond(CMD_ETH1, """{"statistics":{"rx_bytes":$rx,"tx_bytes":$tx}}""")
@@ -55,7 +56,7 @@ class HomeViewModelTest {
     /** Starts a manager and a polling view model, as the screen would while visible. */
     private fun TestScope.start(): HomeViewModel {
         val manager = ConnectionManager(profiles, secrets, { connects++; router }, backgroundScope)
-        val vm = HomeViewModel(manager) { testScheduler.currentTime }
+        val vm = HomeViewModel(manager, { wifiGateway }) { testScheduler.currentTime }
         backgroundScope.launch { vm.poll() }
         return vm
     }
@@ -290,5 +291,31 @@ class HomeViewModelTest {
         assertEquals("each cause has its own title", titles.size, titles.toSet().size)
         assertFalse(unreachable.title in titles)
         assertEquals(offlineMessage(SshError.Disconnected()).title, unreachable.title)
+    }
+
+    @Test
+    fun qr_code_is_loaded_on_request_and_forgotten_on_dismiss() = runTest(dispatcher) {
+        addProfile()
+        val vm = start()
+        runCurrent()
+        assertNull(vm.qr.value)
+        vm.showQr("Home")
+        runCurrent()
+        assertEquals("Home", vm.qr.value!!.ssid)
+        assertEquals("WIFI:T:WPA;S:Home;P:hunter22pass;;", vm.qr.value!!.payload)
+        assertFalse(vm.qr.value.toString().contains("hunter22pass"))
+        assertFalse(vm.ui.value.toString().contains("hunter22pass"))
+        vm.dismissQr()
+        assertNull(vm.qr.value)
+    }
+
+    @Test
+    fun qr_request_for_an_unknown_network_does_nothing() = runTest(dispatcher) {
+        addProfile()
+        val vm = start()
+        runCurrent()
+        vm.showQr("Nope")
+        runCurrent()
+        assertNull(vm.qr.value)
     }
 }

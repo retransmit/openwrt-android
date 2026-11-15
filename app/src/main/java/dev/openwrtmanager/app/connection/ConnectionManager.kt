@@ -27,7 +27,7 @@ import kotlinx.coroutines.yield
 sealed interface ConnectionState {
     data object NoProfile : ConnectionState
     data class Connecting(val profile: Profile) : ConnectionState
-    data class Online(val profile: Profile, val router: RouterClient) : ConnectionState
+    data class Online(val profile: Profile, val router: RouterClient, val ssh: SshExecutor) : ConnectionState
     data class Offline(val profile: Profile, val error: Throwable) : ConnectionState
 }
 
@@ -135,7 +135,7 @@ class ConnectionManager(
             val error = try {
                 router.systemInfo()
                 wasOnline = true
-                _state.value = ConnectionState.Online(profile, router)
+                _state.value = ConnectionState.Online(profile, router, executor)
                 select<Throwable?> {
                     failures.onReceive { it }
                     retries.onReceive { null }

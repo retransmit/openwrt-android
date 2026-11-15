@@ -1,6 +1,9 @@
 package dev.openwrtmanager.app.ui.home
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dev.openwrtmanager.app.wifi.WifiGatewayProvider
+import dev.openwrtmanager.app.wifi.wifiQrPayload
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.openwrtmanager.app.connection.ConnectionManager
 import dev.openwrtmanager.app.connection.ConnectionState
@@ -43,6 +46,10 @@ data class WifiRow(
     val clients: Int,
 )
 
+class QrRequest(val ssid: String, val payload: String) {
+    override fun toString(): String = "QrRequest($ssid)"
+}
+
 data class HomeUi(
     val deviceName: String = "",
     val status: HomeStatus = HomeStatus.NoDevice,
@@ -71,9 +78,12 @@ fun mergeWifi(networks: List<WifiNetwork>): List<WifiRow> =
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val connection: ConnectionManager,
+    private val gateways: WifiGatewayProvider,
     private val time: TimeSource,
 ) : ViewModel() {
     private val _ui = MutableStateFlow(HomeUi())
+    private val _qr = MutableStateFlow<QrRequest?>(null)
+    val qr: StateFlow<QrRequest?> = _qr.asStateFlow()
     val ui: StateFlow<HomeUi> = _ui.asStateFlow()
 
     private val sampler = RateSampler()
@@ -116,6 +126,29 @@ class HomeViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Loads the join code for one network on request. The password is fetched only now, kept only
+     * while the dialog is open, and never becomes part of the Home screen state.
+     */
+    fun showQr(ssid: String) {
+        val gateway = gateways.current() ?: return
+        viewModelScope.launch {
+            try {
+                val group = gateway.wifi().groups.firstOrNull { it.ssid == ssid && it.first.security != null } ?: return@launch
+                val first = group.first
+                _qr.value = QrRequest(ssid, wifiQrPayload(ssid, first.security!!, first.key, first.hidden))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // No code to show; the row simply does nothing.
+            }
+        }
+    }
+
+    fun dismissQr() {
+        _qr.value = null
     }
 
     /** Pull to refresh. Reloads now when online, otherwise asks for a reconnect. */
