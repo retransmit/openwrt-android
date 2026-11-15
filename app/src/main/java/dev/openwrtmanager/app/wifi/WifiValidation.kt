@@ -1,0 +1,21 @@
+package dev.openwrtmanager.app.wifi
+
+enum class SsidError { EMPTY, TOO_LONG }
+
+enum class KeyError { TOO_SHORT, TOO_LONG, NOT_ASCII }
+
+/** A network name is 1 to 32 bytes of UTF-8, so characters outside ASCII count for more than one. */
+fun validateSsid(ssid: String): SsidError? = when {
+    ssid.isEmpty() -> SsidError.EMPTY
+    ssid.toByteArray(Charsets.UTF_8).size > 32 -> SsidError.TOO_LONG
+    else -> null
+}
+
+/** A WPA passphrase is 8 to 63 printable ASCII characters. Open networks have none. */
+fun validateKey(key: String, security: Security): KeyError? = when {
+    security == Security.OPEN -> null
+    key.any { it.code !in 0x20..0x7e } -> KeyError.NOT_ASCII
+    key.length < 8 -> KeyError.TOO_SHORT
+    key.length > 63 -> KeyError.TOO_LONG
+    else -> null
+}
