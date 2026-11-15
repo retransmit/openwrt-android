@@ -149,15 +149,22 @@ class SshjExecutorTest {
     }
 
     @Test
-    fun server_gone_is_disconnected_or_unreachable() = runBlocking<Unit> {
+    fun server_gone_is_unreachable() = runBlocking<Unit> {
         val ssh = executor()
         ssh.exec("hello")
         server.stop(true)
-        try {
-            ssh.exec("hello")
-            fail("expected an SshError")
-        } catch (e: SshError) {
-            assertTrue(e is SshError.Disconnected || e is SshError.Unreachable)
+        // The stale connection is dropped, the one reconnect attempt finds nothing listening.
+        expect<SshError.Unreachable> { ssh.exec("hello") }
+    }
+
+    @Test
+    fun host_that_accepts_the_connection_but_never_speaks_is_unreachable_within_the_connect_timeout() = runBlocking<Unit> {
+        ServerSocket(0).use { silent ->
+            val started = System.nanoTime()
+            expect<SshError.Unreachable> { SshjExecutor.probeFingerprint("127.0.0.1", silent.localPort) }
+            expect<SshError.Unreachable> { executor(onPort = silent.localPort).exec("hello") }
+            val elapsedMs = (System.nanoTime() - started) / 1_000_000
+            assertTrue("took $elapsedMs ms", elapsedMs < 20_000)
         }
     }
 

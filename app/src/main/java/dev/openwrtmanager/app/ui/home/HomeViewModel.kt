@@ -177,7 +177,12 @@ class HomeViewModel @Inject constructor(
         val system = soft { router.systemInfo() }
         val wifi = soft { router.wifiNetworks() }
         val leases = soft { router.leaseCount() }
-        val device = soft { router.uplinkDevice() }
+        // A failed read keeps the previous answer: only a successful one may say there is no uplink.
+        val device = try {
+            router.uplinkDevice()
+        } catch (e: RouterError) {
+            uplink
+        }
         if (device != uplink) {
             uplink = device
             sampler.reset()
@@ -192,7 +197,12 @@ class HomeViewModel @Inject constructor(
                 system = system ?: old.system,
                 wifi = rows,
                 // Leases miss clients served by another DHCP server; Wi-Fi counts miss wired ones. Show the larger.
-                clientTotal = maxOf(leases ?: 0, rows.sumOf { it.clients }),
+                // Stays unknown until at least one of the two sources has answered.
+                clientTotal = if (leases == null && wifi == null && old.clientTotal == null) {
+                    null
+                } else {
+                    maxOf(leases ?: 0, rows.sumOf { it.clients })
+                },
             )
         }
     }
