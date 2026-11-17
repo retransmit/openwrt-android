@@ -10,6 +10,7 @@ import dev.openwrtmanager.app.uci.parseUciConfig
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import dev.openwrtmanager.app.vlan.PortRole
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -60,7 +61,8 @@ class SubnetPickerTest {
 class NetworkWizardTest {
     private fun load(name: String, file: String) = parseUciConfig(name, Fixtures.read(file))
 
-    private val router = DeviceSnapshot(
+    /** The real router as captured: DSA ports in br-lan, no VLAN filtering yet. */
+    private val dsaRouter = DeviceSnapshot(
         wireless = load("wireless", "uci_wireless.json"),
         network = load("network", "uci_network.json"),
         firewall = load("firewall", "uci_firewall.json"),
@@ -68,6 +70,21 @@ class NetworkWizardTest {
         usedSubnets = listOf("192.168.1.0/24", "127.0.0.0/8", "192.168.0.0/24"),
         hasUplink = true,
     )
+
+    /** The same router with a br-lan that lists no ports, as on a device without a DSA switch: the phase 2 layout. */
+    private val router = dsaRouter.copy(
+        network = dsaRouter.network.copy(
+            sections = dsaRouter.network.sections.map {
+                if (it.type == "device" && it.opt("name") == "br-lan") it.copy(lists = it.lists - "ports") else it
+            },
+        ),
+    )
+
+    private val vlanRouter = dsaRouter.copy(
+        network = load("network", "uci_network_vlans.json"),
+        usedSubnets = dsaRouter.usedSubnets + "192.168.10.0/24",
+    )
+
     private val accessPoint = DeviceSnapshot(
         wireless = load("wireless", "uci_wireless_ap.json"),
         network = load("network", "uci_network_ap.json"),
@@ -373,5 +390,117 @@ class NetworkWizardTest {
             assertTrue(expected, expected in configured)
         }
         assertEquals("192.168.14.0/24", pickSubnet(configured))
+    }
+
+    @Test
+    fun guest_on_a_dsa_router_is_vlan_ten_on_br_lan() {
+        val plan = ready(dsaRouter, guest)
+        assertEquals(10, plan.vid)
+        assertEquals("192.168.10.0/24", plan.subnet)
+        val lines = plan.change.batch.script().lines()
+        assertTrue("set network.vlan_lan=bridge-vlan" in lines)
+        assertTrue("set network.lan.device='br-lan.1'" in lines)
+        assertTrue("set network.vlan_guest.vlan='10'" in lines)
+        assertTrue("set network.guest.device='br-lan.10'" in lines)
+        assertTrue("set network.guest.ipaddr='192.168.10.1'" in lines)
+        assertFalse(lines.any { it.startsWith("set network.br_guest") })
+        assertFalse("no ports chosen, Wi-Fi only", lines.any { it.startsWith("add_list network.vlan_guest.ports") })
+        assertTrue("set wireless.guest_radio0.network='guest'" in lines)
+        assertTrue(plan.change.summary.first().startsWith("Turn on VLANs for your LAN ports"))
+        assertTrue("Put it on VLAN 10" in plan.change.summary)
+        assertEquals(listOf("guest"), plan.change.checkInterfaces)
+    }
+
+    @Test
+    fun iot_is_vlan_twenty_on_192_168_20() {
+        val plan = ready(dsaRouter, iot)
+        assertEquals(20, plan.vid)
+        assertEquals("192.168.20.0/24", plan.subnet)
+        assertTrue("set network.iot.device='br-lan.20'" in plan.change.batch.script())
+    }
+
+    @Test
+    fun ports_are_carried_into_the_vlan() {
+        val plan = ready(dsaRouter, guest.copy(ports = mapOf("lan4" to PortRole.TAGGED, "lan3" to PortRole.UNTAGGED)))
+        val lines = plan.change.batch.script().lines()
+        assertTrue("add_list network.vlan_guest.ports='lan4:t'" in lines)
+        assertTrue("add_list network.vlan_guest.ports='lan3:u*'" in lines)
+        assertTrue("lan3 joins guest as a device port" in plan.change.summary)
+        assertTrue("lan4 carries guest to an access point" in plan.change.summary)
+    }
+
+    @Test
+    fun preferred_subnet_taken_falls_back_to_the_picker() {
+        val plan = ready(dsaRouter.copy(usedSubnets = dsaRouter.usedSubnets + "192.168.10.0/24"), guest)
+        assertEquals(10, plan.vid)
+        assertEquals("192.168.11.0/24", plan.subnet)
+    }
+
+    @Test
+    fun second_wizard_network_does_not_convert_again() {
+        val plan = ready(vlanRouter, guest)
+        assertEquals("guest2", plan.networkName)
+        assertEquals(20, plan.vid)
+        val lines = plan.change.batch.script().lines()
+        assertFalse(lines.any { "vlan_lan" in it })
+        assertFalse(lines.any { it.startsWith("set network.lan.") })
+        assertTrue("set network.guest2.device='br-lan.20'" in lines)
+        assertFalse(plan.change.summary.any { it.startsWith("Turn on VLANs") })
+    }
+
+    @Test
+    fun chosen_vid_that_is_taken_is_blocked() {
+        assertEquals(WizardPlan.Blocked(BlockReason.VLAN_PROBLEM), NetworkWizard.plan(vlanRouter, iot.copy(vid = 10)))
+        assertEquals(WizardPlan.Blocked(BlockReason.VLAN_PROBLEM), NetworkWizard.plan(vlanRouter, iot.copy(vid = 5000)))
+    }
+
+    @Test
+    fun custom_network_without_wifi() {
+        val plan = ready(dsaRouter, WizardInput(WizardKind.CUSTOM, "", Security.OPEN, null, emptySet(), customName = "cameras"))
+        assertEquals("cameras", plan.networkName)
+        assertEquals(30, plan.vid)
+        val script = plan.change.batch.script()
+        assertFalse("wireless" in plan.change.batch.configs)
+        assertFalse("firewall.lan_cameras" in script)
+        assertTrue("set firewall.cameras.input='REJECT'" in script)
+        assertTrue("set firewall.cameras_wan.dest='wan'" in script)
+        assertEquals("Create network", plan.change.title)
+    }
+
+    @Test
+    fun custom_name_is_checked() {
+        for (bad in listOf("Lan!", "lan", "guest", "", "a_very_long_name", "9lives")) {
+            val taken = vlanRouter
+            val input = WizardInput(WizardKind.CUSTOM, "", Security.OPEN, null, emptySet(), customName = bad)
+            assertEquals(bad, WizardPlan.Blocked(BlockReason.BAD_NAME), NetworkWizard.plan(taken, input))
+        }
+    }
+
+    @Test
+    fun guest_and_iot_still_need_a_radio() {
+        assertEquals(WizardPlan.Blocked(BlockReason.NO_RADIO), NetworkWizard.plan(dsaRouter, guest.copy(radios = emptySet())))
+    }
+
+    @Test
+    fun access_point_without_dsa_keeps_the_phase_two_layout() {
+        val lines = ready(router, guest).change.batch.script().lines()
+        assertTrue("set network.br_guest=device" in lines)
+        assertFalse(lines.any { "bridge-vlan" in it })
+        assertNull(ready(router, guest).vid)
+    }
+
+    @Test
+    fun removing_a_vlan_network_deletes_its_bridge_vlan() {
+        val lines = NetworkWizard.remove(vlanRouter, "guest").batch.script().lines()
+        assertTrue("delete network.vlan_guest" in lines)
+        assertTrue("delete network.guest" in lines)
+        assertFalse(lines.any { it.startsWith("delete network.cfg") })
+    }
+
+    @Test
+    fun removing_the_last_vlan_network_keeps_filtering_on() {
+        val lines = NetworkWizard.remove(vlanRouter, "guest").batch.script().lines()
+        assertFalse(lines.any { "vlan_lan" in it })
+        assertFalse(lines.any { it.startsWith("set network.lan") || it == "delete network.lan" })
     }
 }
