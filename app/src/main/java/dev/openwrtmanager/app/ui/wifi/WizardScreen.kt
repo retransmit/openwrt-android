@@ -135,6 +135,16 @@ fun WizardScreen(
                             Switch(checked = ui.lanCanReachIot, onCheckedChange = viewModel::onLanCanReachIot)
                         }
                     }
+                    if (ui.ports.isNotEmpty()) {
+                        Text("Also on these ports", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            "Optional. A device port puts everything plugged into it on this network. An AP link carries it " +
+                                "tagged to an access point that understands VLANs. Leave ports on None to keep them on your home network.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        dev.openwrtmanager.app.ui.network.PortRolesEditor(ui.ports, ui.portRoles, viewModel::onPortRole)
+                    }
                     Button(
                         onClick = { viewModel.review()?.let { change -> applyViewModel.review(change) { viewModel.onApplied() } } },
                         enabled = ui.radios.isNotEmpty(),
