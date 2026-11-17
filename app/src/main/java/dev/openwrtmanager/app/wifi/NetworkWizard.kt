@@ -8,6 +8,7 @@ import dev.openwrtmanager.app.uci.UciConfig
 import dev.openwrtmanager.app.uci.UciSection
 import dev.openwrtmanager.app.vlan.PortRole
 import dev.openwrtmanager.app.vlan.VlanPlanner
+import dev.openwrtmanager.app.vlan.homeWifiOn
 import dev.openwrtmanager.app.vlan.vlanLayoutOf
 
 enum class WizardKind { GUEST, IOT, CUSTOM }
@@ -93,7 +94,7 @@ object NetworkWizard {
             val chosen = input.vid ?: VlanPlanner.nextFreeVid(layout, preferred)
             if (VlanPlanner.checkNewId(layout, chosen) != null) return WizardPlan.Blocked(BlockReason.VLAN_PROBLEM)
             layout = VlanPlanner.addVlan(layout, batch, chosen, name, input.ports)
-            if (VlanPlanner.validate(layout, lanHasWifi(snapshot.wireless)).isNotEmpty()) return WizardPlan.Blocked(BlockReason.VLAN_PROBLEM)
+            if (VlanPlanner.validate(layout, homeWifiOn(snapshot.wireless)).isNotEmpty()) return WizardPlan.Blocked(BlockReason.VLAN_PROBLEM)
             vlanSummary = VlanPlanner.summary(before, layout)
             vid = chosen
             "${layout.bridge}.$chosen"
@@ -169,9 +170,6 @@ object NetworkWizard {
         }
         return WizardPlan.Ready(ChangeSet.of(title, summary, batch, checkInterfaces = listOf(name)), name, subnet, vid)
     }
-
-    private fun lanHasWifi(wireless: UciConfig): Boolean =
-        wireless.ofType("wifi-iface").any { "lan" in it.list("network") && !it.flag("disabled") }
 
     /**
      * Removes a network and everything that hangs off it: Wi-Fi interfaces, DHCP pool, firewall zone
