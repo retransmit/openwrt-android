@@ -34,6 +34,10 @@ class ServicesTest {
             assertTrue(actionAllowed(name, ServiceAction.START))
         }
         assertTrue(actionAllowed("cron", ServiceAction.STOP))
+        // rpcd serves ubus uci and rc: without it the app cannot read anything or undo this.
+        assertFalse(actionAllowed("rpcd", ServiceAction.STOP))
+        assertFalse(actionAllowed("rpcd", ServiceAction.DISABLE))
+        assertEquals("The device stops recording its log until it runs again.", actionWarning("log", ServiceAction.STOP))
     }
 
     @Test

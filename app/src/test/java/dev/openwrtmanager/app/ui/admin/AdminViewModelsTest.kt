@@ -31,7 +31,7 @@ class FakeAdminGateway : AdminGateway {
     var logReads = 0
     var system = UciConfig("system", listOf(UciSection("cfg01e48a", "system", true, 0, mapOf("hostname" to "OpenWrt", "zonename" to "Asia/Kolkata", "timezone" to "IST-5:30"), emptyMap())))
     val passwords = mutableListOf<String>()
-    var passwordWorks = true
+    var passwordResult = dev.openwrtmanager.app.admin.PasswordResult.CHANGED
     var reboots = 0
 
     override suspend fun services() = services
@@ -44,9 +44,9 @@ class FakeAdminGateway : AdminGateway {
         return logs.getValue(kind)
     }
     override suspend fun systemConfig() = system
-    override suspend fun setRootPassword(password: String): Boolean {
+    override suspend fun setRootPassword(password: String): dev.openwrtmanager.app.admin.PasswordResult {
         passwords += password
-        return passwordWorks
+        return passwordResult
     }
     override suspend fun reboot(): Boolean {
         reboots++
@@ -112,11 +112,13 @@ class AdminViewModelsTest {
     private val profiles = FakeProfileRepository()
     private val secrets = InMemorySecretStore()
 
-    private suspend fun systemViewModel(auth: AuthType): SystemViewModel {
-        val id = profiles.save(Profile(name = "Router", host = "192.168.1.1", authType = auth))
+    private var loginRefreshes = 0
+
+    private suspend fun systemViewModel(auth: AuthType, user: String = "root"): SystemViewModel {
+        val id = profiles.save(Profile(name = "Router", host = "192.168.1.1", username = user, authType = auth))
         profiles.setActive(id)
         secrets.put(id, "old secret")
-        return SystemViewModel({ gateway }, profiles, secrets) { listOf("Asia/Kolkata" to "IST-5:30", "Europe/London" to "GMT0BST,M3.5.0/1,M10.5.0") }.also { it.load() }
+        return SystemViewModel({ gateway }, profiles, secrets, { loginRefreshes++ }) { listOf("Asia/Kolkata" to "IST-5:30", "Europe/London" to "GMT0BST,M3.5.0/1,M10.5.0") }.also { it.load() }
     }
 
     @Test
@@ -126,6 +128,27 @@ class AdminViewModelsTest {
         assertEquals(listOf("new password 1"), gateway.passwords)
         assertEquals("new password 1", secrets.values.values.single())
         assertEquals("Password changed. The app's saved login was updated too.", (vm.ui.value as SystemUi.Ready).message)
+        assertEquals("the open connection must pick up the new password", 1, loginRefreshes)
+    }
+
+    @Test
+    fun unconfirmed_change_says_so() = runTest {
+        val vm = systemViewModel(AuthType.PASSWORD)
+        gateway.passwordResult = dev.openwrtmanager.app.admin.PasswordResult.UNKNOWN
+        assertFalse(vm.changePassword("new password 1", "new password 1"))
+        assertEquals("old secret", secrets.values.values.single())
+        assertEquals(
+            "The app could not confirm whether the password changed. If it cannot log in afterwards, edit this device and enter the new password.",
+            (vm.ui.value as SystemUi.Ready).message,
+        )
+    }
+
+    @Test
+    fun a_login_that_is_not_root_is_not_updated() = runTest {
+        val vm = systemViewModel(AuthType.PASSWORD, user = "admin")
+        assertTrue(vm.changePassword("new password 1", "new password 1"))
+        assertEquals("old secret", secrets.values.values.single())
+        assertEquals(0, loginRefreshes)
     }
 
     @Test
@@ -142,7 +165,7 @@ class AdminViewModelsTest {
         assertEquals("The two passwords do not match.", (vm.ui.value as SystemUi.Ready).message)
         assertFalse(vm.changePassword("short", "short"))
         assertTrue(gateway.passwords.isEmpty())
-        gateway.passwordWorks = false
+        gateway.passwordResult = dev.openwrtmanager.app.admin.PasswordResult.REFUSED
         assertFalse(vm.changePassword("new password 1", "new password 1"))
         assertEquals("old secret", secrets.values.values.single())
     }

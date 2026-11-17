@@ -16,8 +16,15 @@ class LogsTest {
         assertEquals(listOf("a", "b", "c", "d", "e"), mergeFollow(shown, listOf("b", "c", "d", "e")))
         assertEquals("nothing new", shown, mergeFollow(shown, listOf("a", "b", "c")))
         // A line that repeats: take what follows its last occurrence.
-        // A repeated line anchors on its last occurrence: never shows a line twice, may skip a repeat.
-        assertEquals(listOf("x", "c", "z"), mergeFollow(listOf("x", "c"), listOf("c", "y", "c", "z")))
+        // A repeated line: the anchor is the occurrence whose earlier lines match what is shown.
+        assertEquals(listOf("x", "c", "y", "c", "z"), mergeFollow(listOf("x", "c"), listOf("c", "y", "c", "z")))
+    }
+
+    @Test
+    fun a_repeated_line_does_not_swallow_the_lines_between() {
+        assertEquals(listOf("A", "B", "C", "B"), mergeFollow(listOf("A", "B"), listOf("B", "C", "B")))
+        assertEquals(listOf("A", "B", "C", "B"), mergeFollow(listOf("A", "B"), listOf("A", "B", "C", "B")))
+        assertEquals("already caught up", listOf("A", "B", "C", "B"), mergeFollow(listOf("A", "B", "C", "B"), listOf("B", "C", "B")))
     }
 
     @Test

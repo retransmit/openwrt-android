@@ -11,13 +11,17 @@ fun logCommand(kind: LogKind): String = when (kind) {
 }
 
 /**
- * Adds a fresh batch to what is on screen: the lines after the last occurrence of the last line
- * shown. When that line is gone (the log rotated, or nothing is shown yet) the batch replaces the view.
- * Keeps the newest [MAX_SHOWN] lines.
+ * Adds a fresh batch to what is on screen. The anchor is the latest occurrence of the last shown line
+ * whose earlier lines in the batch also match the end of what is shown, so a line that repeats (same
+ * text in the same second) does not swallow the lines between. Without such an anchor (the log
+ * rotated, or nothing is shown yet) the batch replaces the view. Keeps the newest [MAX_SHOWN] lines.
  */
 fun mergeFollow(shown: List<String>, fresh: List<String>): List<String> {
-    val anchor = shown.lastOrNull()
-    val at = anchor?.let { fresh.lastIndexOf(it) } ?: -1
+    if (shown.isEmpty()) return fresh.takeLast(MAX_SHOWN)
+    val last = shown.size - 1
+    val at = fresh.indices.reversed().firstOrNull { p ->
+        fresh[p] == shown[last] && (1..minOf(p, last)).all { j -> fresh[p - j] == shown[last - j] }
+    } ?: -1
     val merged = if (at < 0) fresh else shown + fresh.drop(at + 1)
     return merged.takeLast(MAX_SHOWN)
 }

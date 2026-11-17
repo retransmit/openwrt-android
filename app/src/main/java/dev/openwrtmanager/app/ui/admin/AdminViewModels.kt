@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.openwrtmanager.app.admin.AdminGatewayProvider
 import dev.openwrtmanager.app.admin.LogKind
+import dev.openwrtmanager.app.admin.PasswordResult
 import dev.openwrtmanager.app.admin.Service
 import dev.openwrtmanager.app.admin.ServiceAction
 import dev.openwrtmanager.app.admin.SystemConfig
@@ -134,6 +135,11 @@ class LogsViewModel @Inject constructor(private val gateways: AdminGatewayProvid
     }
 }
 
+/** Makes the open connection log in again with the saved login, after it changed. */
+fun interface LoginRefresher {
+    fun refresh()
+}
+
 fun interface ZoneSource {
     /** Zone name and POSIX TZ string. */
     fun zones(): List<Pair<String, String>>
@@ -154,6 +160,7 @@ class SystemViewModel @Inject constructor(
     private val gateways: AdminGatewayProvider,
     private val profiles: ProfileRepository,
     private val secrets: SecretStore,
+    private val loginRefresher: LoginRefresher,
     private val zoneSource: ZoneSource,
 ) : ViewModel() {
     private val _ui = MutableStateFlow<SystemUi>(SystemUi.Loading)
@@ -200,12 +207,20 @@ class SystemViewModel @Inject constructor(
     suspend fun changePassword(password: String, repeat: String): Boolean {
         if (password != repeat) return fail("The two passwords do not match.")
         if (!isValidPassword(password)) return fail("Use 8 to 128 characters: letters, digits, spaces and symbols from a standard keyboard.")
-        val ok = soft { gateways.current()?.setRootPassword(password) } == true
-        if (!ok) return fail("The router did not accept the new password. Nothing was changed.")
+        when (soft { gateways.current()?.setRootPassword(password) } ?: PasswordResult.UNKNOWN) {
+            PasswordResult.REFUSED -> return fail("The router did not accept the new password. Nothing was changed.")
+            PasswordResult.UNKNOWN -> return fail(
+                "The app could not confirm whether the password changed. If it cannot log in afterwards, edit this device and enter the new password.",
+            )
+            PasswordResult.CHANGED -> Unit
+        }
         val id = profiles.observeActiveId().first()
         val profile = id?.let { profiles.get(it) }
-        if (profile != null && profile.authType == AuthType.PASSWORD) {
+        // Only a login as root uses the password that just changed.
+        if (profile != null && profile.authType == AuthType.PASSWORD && profile.username == "root") {
             secrets.put(profile.id, password)
+            // The open connection still holds the old password; it must log in again with the new one.
+            loginRefresher.refresh()
             say("Password changed. The app's saved login was updated too.")
         } else {
             say("Password changed.")

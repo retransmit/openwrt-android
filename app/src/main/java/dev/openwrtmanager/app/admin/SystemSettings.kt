@@ -40,6 +40,9 @@ fun parseZones(tsv: String): List<Pair<String, String>> = tsv.lines().mapNotNull
     if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) parts[0] to parts[1] else null
 }
 
+/** What the router said about a password change. UNKNOWN: the link dropped, so it may or may not have changed. */
+enum class PasswordResult { CHANGED, REFUSED, UNKNOWN }
+
 /** 8 to 128 printable ASCII characters; spaces allowed, also at the ends. */
 fun isValidPassword(password: String): Boolean = password.length in 8..128 && password.all { it.code in 0x20..0x7e }
 
