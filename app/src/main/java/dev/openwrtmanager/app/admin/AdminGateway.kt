@@ -18,6 +18,12 @@ interface AdminGateway {
     suspend fun setRootPassword(password: String): PasswordResult
 
     suspend fun reboot(): Boolean
+
+    /** Which package manager the device has; null when neither apk nor opkg is there. */
+    suspend fun packageTool(): PackageTool?
+
+    /** Runs a package command and returns what it printed. Null for a refused name. */
+    suspend fun runPackage(tool: PackageTool, action: PackageAction, name: String?): CommandOutput?
 }
 
 fun interface AdminGatewayProvider {
@@ -63,4 +69,14 @@ class SshAdminGateway(private val ssh: SshExecutor) : AdminGateway {
     }
 
     override suspend fun reboot(): Boolean = ssh.exec("ubus call system reboot").exitCode == 0
+
+    override suspend fun packageTool(): PackageTool? = parseTool(ssh.exec(DETECT_TOOL_COMMAND).stdout)
+
+    override suspend fun runPackage(tool: PackageTool, action: PackageAction, name: String?): CommandOutput? {
+        val command = packageCommand(tool, action, name) ?: return null
+        // Installing and updating fetch from the internet and can take a while.
+        val slow = action == PackageAction.UPDATE || action == PackageAction.INSTALL || action == PackageAction.REMOVE
+        val result = ssh.exec("$command 2>&1", timeoutMs = if (slow) 180_000 else 30_000)
+        return CommandOutput(result.exitCode, result.stdout.trim())
+    }
 }

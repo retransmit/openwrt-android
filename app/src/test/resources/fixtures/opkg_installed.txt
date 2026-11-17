@@ -1,0 +1,6 @@
+base-files - 1567-r24106-10cc5fcd00
+busybox - 1.36.1-1
+dnsmasq - 2.90-2
+kmod-nf-conntrack - 5.15.162-1
+libsqlite3-0 - 3460000-1
+luci-app-firewall - git-24.086.45142-09d5a38

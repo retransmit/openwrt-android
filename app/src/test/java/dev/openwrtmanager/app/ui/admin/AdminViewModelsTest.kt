@@ -52,6 +52,21 @@ class FakeAdminGateway : AdminGateway {
         reboots++
         return true
     }
+
+    var tool: dev.openwrtmanager.app.admin.PackageTool? = dev.openwrtmanager.app.admin.PackageTool.APK
+    val packageRuns = mutableListOf<Pair<dev.openwrtmanager.app.admin.PackageAction, String?>>()
+    var packageOutputs = mutableMapOf<dev.openwrtmanager.app.admin.PackageAction, dev.openwrtmanager.app.admin.CommandOutput>()
+
+    override suspend fun packageTool() = tool
+
+    override suspend fun runPackage(
+        tool: dev.openwrtmanager.app.admin.PackageTool,
+        action: dev.openwrtmanager.app.admin.PackageAction,
+        name: String?,
+    ): dev.openwrtmanager.app.admin.CommandOutput? {
+        packageRuns += action to name
+        return packageOutputs[action] ?: dev.openwrtmanager.app.admin.CommandOutput(0, "")
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
