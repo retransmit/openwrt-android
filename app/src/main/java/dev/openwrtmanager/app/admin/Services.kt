@@ -33,8 +33,11 @@ fun parseServices(json: String): List<Service> = try {
     emptyList()
 }
 
-/** Stopping or disabling these would cut the app off from the device. */
-private val PROTECTED = setOf("dropbear", "network")
+/**
+ * Stopping or disabling these would cut the app off from the device: SSH, the network, and rpcd,
+ * which serves the ubus uci and rc calls the app reads everything through.
+ */
+private val PROTECTED = setOf("dropbear", "network", "rpcd")
 
 fun actionAllowed(name: String, action: ServiceAction): Boolean =
     !(name in PROTECTED && (action == ServiceAction.STOP || action == ServiceAction.DISABLE))
@@ -45,6 +48,7 @@ fun actionWarning(name: String, action: ServiceAction): String? {
         stopping && name == "dnsmasq" -> "Devices will lose names and new addresses until it runs again."
         stopping && name == "odhcpd" -> "Devices will lose IPv6 addresses until it runs again."
         stopping && name == "firewall" -> "Your networks will be unprotected and guest isolation stops."
+        stopping && name == "log" -> "The device stops recording its log until it runs again."
         action == ServiceAction.RESTART && name in PROTECTED -> "The app reconnects after a few seconds."
         else -> null
     }

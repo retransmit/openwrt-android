@@ -174,6 +174,10 @@ object WifiModule {
     }
 
     @Provides
+    fun loginRefresher(connection: dev.openwrtmanager.app.connection.ConnectionManager): dev.openwrtmanager.app.ui.admin.LoginRefresher =
+        dev.openwrtmanager.app.ui.admin.LoginRefresher { connection.retryNow() }
+
+    @Provides
     @Singleton
     fun zoneSource(@ApplicationContext context: Context): dev.openwrtmanager.app.ui.admin.ZoneSource {
         val zones by lazy {

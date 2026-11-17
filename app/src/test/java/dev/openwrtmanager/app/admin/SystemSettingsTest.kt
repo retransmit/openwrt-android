@@ -74,12 +74,28 @@ class SystemSettingsTest {
 
             override suspend fun close() = Unit
         }
-        assertTrue(SshAdminGateway(ssh).setRootPassword("s3cret pass'\"x"))
+        assertEquals(PasswordResult.CHANGED, SshAdminGateway(ssh).setRootPassword("s3cret pass'\"x"))
         val (command, stdin) = sent.single()
         assertEquals(PASSWORD_COMMAND, command)
         assertFalse(command.contains("s3cret"))
         assertEquals("s3cret pass'\"x\n", stdin)
         assertTrue("whitespace kept intact", PASSWORD_COMMAND.contains("IFS= read -r p"))
+    }
+
+    @Test
+    fun a_dropped_link_is_unknown_not_refused() = runTest {
+        val dropped = object : SshExecutor {
+            override suspend fun exec(command: String, timeoutMs: Long, stdin: String?): ExecResult = throw dev.openwrtmanager.app.ssh.SshError.Disconnected()
+
+            override suspend fun close() = Unit
+        }
+        assertEquals(PasswordResult.UNKNOWN, SshAdminGateway(dropped).setRootPassword("long enough 1"))
+        val refused = object : SshExecutor {
+            override suspend fun exec(command: String, timeoutMs: Long, stdin: String?): ExecResult = ExecResult(1, "", "passwd: error")
+
+            override suspend fun close() = Unit
+        }
+        assertEquals(PasswordResult.REFUSED, SshAdminGateway(refused).setRootPassword("long enough 1"))
     }
 
     @Test
@@ -93,7 +109,7 @@ class SystemSettingsTest {
 
             override suspend fun close() = Unit
         }
-        assertFalse(SshAdminGateway(ssh).setRootPassword("short"))
+        assertEquals(PasswordResult.REFUSED, SshAdminGateway(ssh).setRootPassword("short"))
         assertEquals(0, calls)
     }
 }

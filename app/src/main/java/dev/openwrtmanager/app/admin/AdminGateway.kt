@@ -15,7 +15,7 @@ interface AdminGateway {
     suspend fun systemConfig(): UciConfig
 
     /** Sends the password on standard input only. False when it is not valid or passwd failed. */
-    suspend fun setRootPassword(password: String): Boolean
+    suspend fun setRootPassword(password: String): PasswordResult
 
     suspend fun reboot(): Boolean
 }
@@ -45,9 +45,21 @@ class SshAdminGateway(private val ssh: SshExecutor) : AdminGateway {
 
     override suspend fun systemConfig(): UciConfig = dev.openwrtmanager.app.uci.UciClient(ssh).load("system")
 
-    override suspend fun setRootPassword(password: String): Boolean {
-        if (!isValidPassword(password)) return false
-        return ssh.exec(PASSWORD_COMMAND, timeoutMs = 20_000, stdin = password + "\n").exitCode == 0
+    /** Only a reply from the router decides; a dropped link means it may or may not have changed. */
+    override suspend fun setRootPassword(password: String): PasswordResult {
+        if (!isValidPassword(password)) return PasswordResult.REFUSED
+        val result = try {
+            ssh.exec(PASSWORD_COMMAND, timeoutMs = 20_000, stdin = password + "\n")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return PasswordResult.UNKNOWN
+        }
+        return when (result.exitCode) {
+            0 -> PasswordResult.CHANGED
+            -1 -> PasswordResult.UNKNOWN
+            else -> PasswordResult.REFUSED
+        }
     }
 
     override suspend fun reboot(): Boolean = ssh.exec("ubus call system reboot").exitCode == 0
