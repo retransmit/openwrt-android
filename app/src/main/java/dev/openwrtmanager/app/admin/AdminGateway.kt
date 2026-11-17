@@ -1,6 +1,7 @@
 package dev.openwrtmanager.app.admin
 
 import dev.openwrtmanager.app.ssh.SshExecutor
+import dev.openwrtmanager.app.uci.UciConfig
 
 /** Reads and the few non-config actions of the admin screens. Config changes go through safe apply. */
 interface AdminGateway {
@@ -10,6 +11,13 @@ interface AdminGateway {
     suspend fun runService(name: String, action: ServiceAction): Boolean
 
     suspend fun log(kind: LogKind): List<String>
+
+    suspend fun systemConfig(): UciConfig
+
+    /** Sends the password on standard input only. False when it is not valid or passwd failed. */
+    suspend fun setRootPassword(password: String): Boolean
+
+    suspend fun reboot(): Boolean
 }
 
 fun interface AdminGatewayProvider {
@@ -34,4 +42,13 @@ class SshAdminGateway(private val ssh: SshExecutor) : AdminGateway {
         if (result.exitCode != 0) throw IllegalStateException("log read failed")
         return result.stdout.lines().map { it.trimEnd() }.filter { it.isNotEmpty() }
     }
+
+    override suspend fun systemConfig(): UciConfig = dev.openwrtmanager.app.uci.UciClient(ssh).load("system")
+
+    override suspend fun setRootPassword(password: String): Boolean {
+        if (!isValidPassword(password)) return false
+        return ssh.exec(PASSWORD_COMMAND, timeoutMs = 20_000, stdin = password + "\n").exitCode == 0
+    }
+
+    override suspend fun reboot(): Boolean = ssh.exec("ubus call system reboot").exitCode == 0
 }
