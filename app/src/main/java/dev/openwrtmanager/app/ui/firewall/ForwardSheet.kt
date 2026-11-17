@@ -62,6 +62,13 @@ internal fun ForwardSheet(existing: PortForward?, clients: List<Client>, onDismi
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(),
             )
             Text("To device", style = MaterialTheme.typography.labelLarge)
+            if (existing != null && clients.none { it.ip == existing.insideIp }) {
+                Text(
+                    "This forward points to ${existing.insideIp ?: "no address"}, which matches no device listed here. Pick the device it should go to.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             if (clients.isEmpty()) Text("No devices with an address are connected right now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             clients.forEach { client ->
                 Row(Modifier.fillMaxWidth().clickable { target = client }, verticalAlignment = Alignment.CenterVertically) {

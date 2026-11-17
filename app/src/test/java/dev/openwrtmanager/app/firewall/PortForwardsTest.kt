@@ -162,6 +162,29 @@ class PortForwardsTest {
     }
 
     @Test
+    fun host_entry_without_a_usable_address_is_not_a_reservation() {
+        for (ip in listOf(null, "ignore")) {
+            val hostOnly = config.copy(
+                dhcp = UciConfig(
+                    "dhcp",
+                    config.dhcp.sections + UciSection(
+                        "cfg0e0e0e", "host", true, 60,
+                        buildMap { put("name", "console"); put("mac", "AA:BB:CC:DD:EE:FF"); ip?.let { put("ip", it) } },
+                        emptyMap(),
+                    ),
+                ),
+            )
+            assertEquals("ip=$ip", Planned.Problem(ForwardProblem.CANNOT_RESERVE), PortForwards.add(hostOnly, input()))
+        }
+    }
+
+    @Test
+    fun enabling_an_enabled_forward_is_empty() {
+        val existing = firewallViewOf(withForward("8080", listOf("tcp")).firewall).forwards.single()
+        assertTrue(PortForwards.setEnabled(existing, true).isEmpty())
+    }
+
+    @Test
     fun next_free_section_name() {
         val one = ready(PortForwards.add(reservedConfig, input()))
         val taken = reservedConfig.copy(firewall = UciConfig("firewall", reservedConfig.firewall.sections + UciSection("owm_fwd_1", "redirect", false, 90, mapOf("src_dport" to "1", "proto" to "udp"), emptyMap())))

@@ -59,6 +59,20 @@ class FirewallModelTest {
     }
 
     @Test
+    fun only_redirects_from_the_wan_zone_are_port_forwards() {
+        val dnsHijack = section("cfg0d0d0d", "redirect", mapOf("name" to "DNS", "src" to "lan", "src_dport" to "53", "target" to "DNAT"))
+        assertEquals(emptyList<PortForward>(), firewallViewOf(UciConfig("firewall", firewall.sections + dnsHijack)).forwards)
+    }
+
+    @Test
+    fun other_ways_of_saying_disabled_are_read() {
+        for (word in listOf("0", "false", "no", "off")) {
+            val rule = section("r", "rule", mapOf("name" to "x", "src" to "wan", "target" to "ACCEPT", "enabled" to word))
+            assertFalse(word, firewallViewOf(UciConfig("firewall", listOf(rule))).rules.single().enabled)
+        }
+    }
+
+    @Test
     fun rules_are_described_in_words() {
         val rules = firewallViewOf(firewall).rules.associate { it.name to it.description }
         assertEquals("Allows ping from wan to the router", rules["Allow-Ping"])

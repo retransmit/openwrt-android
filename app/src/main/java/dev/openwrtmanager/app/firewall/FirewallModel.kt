@@ -42,7 +42,8 @@ data class FirewallView(val zones: List<Zone>, val forwards: List<PortForward>, 
 /** A list option, also when old configs wrote it as one space-separated string. */
 internal fun UciSection.words(key: String): List<String> = list(key).flatMap { it.split(' ', '\t') }.filter { it.isNotEmpty() }
 
-private fun UciSection.enabled(): Boolean = opt("enabled") != "0"
+/** fw4 reads 0, false, no and off as disabled. */
+private fun UciSection.enabled(): Boolean = opt("enabled")?.lowercase() !in setOf("0", "false", "no", "off")
 
 fun firewallViewOf(firewall: UciConfig): FirewallView {
     val forwardings = firewall.ofType("forwarding").filter { it.enabled() }
@@ -58,7 +59,11 @@ fun firewallViewOf(firewall: UciConfig): FirewallView {
             forwardsTo = forwardings.filter { it.opt("src") == name }.mapNotNull { it.opt("dest") },
         )
     }
-    val forwards = firewall.ofType("redirect").filter { (it.opt("target") ?: "DNAT") == "DNAT" }.map { r ->
+    val wanZone = zones.firstOrNull { "wan" in it.networks }?.name
+    // Only redirects from the internet are port forwards; a LAN-side DNS redirect is something else.
+    val forwards = firewall.ofType("redirect").filter {
+        (it.opt("target") ?: "DNAT") == "DNAT" && it.opt("src") == (wanZone ?: "wan")
+    }.map { r ->
         PortForward(
             section = r.name,
             name = r.opt("name") ?: r.name,
@@ -74,7 +79,7 @@ fun firewallViewOf(firewall: UciConfig): FirewallView {
         val name = rule.opt("name") ?: "Unnamed rule"
         TrafficRule(rule.name, rule.index, name, describeRule(rule), rule.enabled(), standard = name.startsWith("Allow-"))
     }
-    return FirewallView(zones, forwards, rules, zones.firstOrNull { "wan" in it.networks }?.name)
+    return FirewallView(zones, forwards, rules, wanZone)
 }
 
 /** A rule in one sentence, such as "Allows UDP port 68 from wan to the router". */
