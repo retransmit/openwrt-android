@@ -59,6 +59,25 @@ class FakeAdminGateway : AdminGateway {
 
     override suspend fun packageTool() = tool
 
+    var backup: ByteArray? = byteArrayOf(0x1f, 0x8b.toByte(), 1, 2, 3)
+    var uploadToken: String? = "0123456789ab"
+    val uploads = mutableListOf<ByteArray>()
+    val applied = mutableListOf<String>()
+    val discarded = mutableListOf<String>()
+
+    override suspend fun downloadBackup() = backup
+    override suspend fun uploadRestore(bytes: ByteArray): String? {
+        uploads += bytes
+        return uploadToken
+    }
+    override suspend fun applyRestore(token: String): Boolean {
+        applied += token
+        return true
+    }
+    override suspend fun discardRestore(token: String) {
+        discarded += token
+    }
+
     override suspend fun runPackage(
         tool: dev.openwrtmanager.app.admin.PackageTool,
         action: dev.openwrtmanager.app.admin.PackageAction,
