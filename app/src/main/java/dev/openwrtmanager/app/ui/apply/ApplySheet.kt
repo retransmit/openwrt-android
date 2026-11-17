@@ -70,7 +70,7 @@ fun ApplySheet(viewModel: ApplyViewModel) {
             when (val state = ui) {
                 is ApplyUi.Review -> Review(state, onApply = viewModel::confirm, onCancel = viewModel::dismiss)
                 is ApplyUi.Working -> Working(state)
-                is ApplyUi.Done -> Done(state.outcome, onClose = viewModel::dismiss)
+                is ApplyUi.Done -> Done(state.outcome, state.problems, onClose = viewModel::dismiss)
                 ApplyUi.Idle -> Unit
             }
         }
@@ -171,7 +171,7 @@ private fun Working(state: ApplyUi.Working) {
 }
 
 @Composable
-private fun Done(outcome: ApplyOutcome, onClose: () -> Unit) {
+private fun Done(outcome: ApplyOutcome, problems: List<dev.openwrtmanager.app.apply.HealthProblem>, onClose: () -> Unit) {
     val message = outcomeMessage(outcome)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Icon(
@@ -182,6 +182,20 @@ private fun Done(outcome: ApplyOutcome, onClose: () -> Unit) {
         Text(message.title, style = MaterialTheme.typography.titleLarge)
     }
     Text(message.detail, style = MaterialTheme.typography.bodyLarge)
+    if (problems.isNotEmpty()) {
+        Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Something is not right yet", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                problems.forEach {
+                    Text(
+                        dev.openwrtmanager.app.apply.problemMessage(it),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
+            }
+        }
+    }
     message.code?.let { code ->
         Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = MaterialTheme.shapes.small) {
             Text(

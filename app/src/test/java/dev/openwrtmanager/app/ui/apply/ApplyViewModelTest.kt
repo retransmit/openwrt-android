@@ -36,6 +36,8 @@ class ApplyViewModelTest {
     private var sessionsClosed = 0
     private var online = true
     private var phaseSink: ((ApplyPhase) -> Unit)? = null
+    private val healthCalls = mutableListOf<List<String>>()
+    private var healthResult: List<dev.openwrtmanager.app.apply.HealthProblem> = emptyList()
 
     private val applier = object : Applier {
         override suspend fun preview(change: ChangeSet): String = previewResult()
@@ -51,7 +53,7 @@ class ApplyViewModelTest {
     private fun viewModel() = ApplyViewModel {
         if (!online) null else {
             sessionsOpened++
-            ApplySession(applier) { sessionsClosed++ }
+            ApplySession(applier, health = { names -> healthCalls += names; healthResult }) { sessionsClosed++ }
         }
     }
 
@@ -214,5 +216,44 @@ class ApplyViewModelTest {
         vm.confirm()
         runCurrent()
         assertEquals(1, applyCalls)
+    }
+
+    @Test
+    fun applied_change_runs_the_health_check_for_its_interfaces() = runTest(dispatcher) {
+        healthResult = listOf(dev.openwrtmanager.app.apply.HealthProblem.NoDhcp("guest"))
+        val vm = viewModel()
+        vm.review(change.copy(checkInterfaces = listOf("guest"))) {}
+        runCurrent()
+        vm.confirm()
+        runCurrent()
+        outcome.complete(ApplyOutcome.Applied)
+        runCurrent()
+        assertEquals(listOf(listOf("guest")), healthCalls)
+        assertEquals(ApplyUi.Done(ApplyOutcome.Applied, healthResult), vm.ui.value)
+    }
+
+    @Test
+    fun rolled_back_change_skips_it() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.review(change.copy(checkInterfaces = listOf("guest"))) {}
+        runCurrent()
+        vm.confirm()
+        runCurrent()
+        outcome.complete(ApplyOutcome.RolledBack)
+        runCurrent()
+        assertEquals(emptyList<List<String>>(), healthCalls)
+        assertEquals(ApplyUi.Done(ApplyOutcome.RolledBack), vm.ui.value)
+    }
+
+    @Test
+    fun change_without_interfaces_is_not_checked() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.review(change) {}
+        runCurrent()
+        vm.confirm()
+        runCurrent()
+        outcome.complete(ApplyOutcome.Applied)
+        runCurrent()
+        assertEquals(emptyList<List<String>>(), healthCalls)
     }
 }
