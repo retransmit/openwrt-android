@@ -61,18 +61,27 @@ import dev.openwrtmanager.app.vlan.PortRole
 @Composable
 fun VlanScreen(
     viewModel: VlanViewModel = hiltViewModel(),
+    extras: NetworkExtrasViewModel = hiltViewModel(),
     applyViewModel: ApplyViewModel = hiltViewModel(),
 ) {
     LifecycleResumeEffect(viewModel) {
         viewModel.load()
+        extras.load()
         onPauseOrDispose { }
     }
     val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val extrasUi by extras.ui.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<VlanRow?>(null) }
     var creating by remember { mutableStateOf(false) }
     var removing by remember { mutableStateOf<VlanRow?>(null) }
+    val dialogs = remember { ExtrasDialogs() }
     val review: (ChangeSet?) -> Boolean = { change ->
-        if (change != null) applyViewModel.review(change) { viewModel.load() }
+        if (change != null) {
+            applyViewModel.review(change) {
+                viewModel.load()
+                extras.load()
+            }
+        }
         change != null
     }
 
@@ -89,6 +98,8 @@ fun VlanScreen(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                (extrasUi as? ExtrasUi.Ready)?.let { state -> InterfacesSection(state, onEditPool = { dialogs.pool = it }) }
+                if (ui is VlanUi.Ready) Text("VLANs", style = MaterialTheme.typography.titleMedium)
                 when (val state = ui) {
                     VlanUi.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
                     VlanUi.Offline -> Notice(Icons.Default.LinkOff, "Not connected", "Connect to a device on the Home tab to manage its network.")
@@ -112,9 +123,16 @@ fun VlanScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         state.rows.forEach { row -> VlanCard(row, state.ports, onEdit = { editing = row }, onRemove = { removing = row }) }
-                        Text("", Modifier.padding(bottom = 64.dp))
                     }
                 }
+                (extrasUi as? ExtrasUi.Ready)?.let { state ->
+                    ReservationsSection(
+                        state,
+                        onEdit = { dialogs.reservation = it },
+                        onRemove = { review(extras.removeReservation(it)) },
+                    )
+                }
+                Text("", Modifier.padding(bottom = 64.dp))
             }
         }
     }
@@ -162,6 +180,7 @@ fun VlanScreen(
             dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } },
         )
     }
+    ExtrasDialogsHost(dialogs, extras, review)
     ApplySheet(applyViewModel)
 }
 

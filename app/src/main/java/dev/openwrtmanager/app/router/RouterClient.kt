@@ -19,6 +19,17 @@ sealed class RouterError(message: String) : Exception(message) {
     class BadResponse(val command: String) : RouterError("unparseable response: $command")
 }
 
+/** One network interface as the Network tab shows it. Traffic is null while it is down. */
+data class InterfaceStatus(
+    val name: String,
+    val up: Boolean,
+    val proto: String,
+    val ipv4: String?,
+    val uptimeSeconds: Long?,
+    val rxBytes: Long?,
+    val txBytes: Long?,
+)
+
 class RouterClient(private val ssh: SshExecutor) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; coerceInputValues = true }
 
@@ -44,6 +55,24 @@ class RouterClient(private val ssh: SshExecutor) {
         ubus("ubus call network.interface dump", InterfaceDumpDto.serializer()).interfaces
             .mapNotNull { iface -> iface.l3Device?.takeIf { it.isNotEmpty() }?.let { iface.name to it } }
             .toMap()
+
+    /** Every interface except loopback, with traffic from its current device when it is up. */
+    suspend fun interfaces(): List<InterfaceStatus> =
+        ubus("ubus call network.interface dump", InterfaceDumpDto.serializer()).interfaces
+            .filter { it.name != "loopback" && it.l3Device != "lo" }
+            .map { iface ->
+                val device = iface.l3Device?.takeIf { iface.up && it.isNotEmpty() }
+                val traffic = device?.let { runCatching { counters(it) }.getOrNull() }
+                InterfaceStatus(
+                    name = iface.name,
+                    up = iface.up,
+                    proto = iface.proto,
+                    ipv4 = iface.ipv4.firstOrNull()?.let { "${it.address}/${it.mask}" },
+                    uptimeSeconds = iface.uptime?.takeIf { iface.up },
+                    rxBytes = traffic?.rxBytes,
+                    txBytes = traffic?.txBytes,
+                )
+            }
 
     /** IPv4 ranges already in use on this device, as CIDR strings, one per configured address. */
     suspend fun usedSubnets(): List<String> =

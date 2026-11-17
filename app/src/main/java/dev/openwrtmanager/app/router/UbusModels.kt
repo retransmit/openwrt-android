@@ -36,6 +36,9 @@ internal data class InterfaceDumpDto(@SerialName("interface") val interfaces: Li
 internal data class InterfaceDto(
     @SerialName("interface") val name: String = "",
     val up: Boolean = false,
+    val proto: String = "",
+    val uptime: Long? = null,
+    val device: String? = null,
     @SerialName("l3_device") val l3Device: String? = null,
     val route: List<RouteDto> = emptyList(),
     @SerialName("ipv4-address") val ipv4: List<AddressDto> = emptyList(),
