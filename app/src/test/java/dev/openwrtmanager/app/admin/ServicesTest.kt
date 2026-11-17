@@ -20,6 +20,12 @@ class ServicesTest {
     }
 
     @Test
+    fun firewall_has_no_running_state() {
+        // fw4 loads its rules and exits; procd reports it as not running even while it protects.
+        assertEquals(null, services.first { it.name == "firewall" }.running)
+    }
+
+    @Test
     fun protected_services_cannot_be_stopped() {
         for (name in listOf("dropbear", "network")) {
             assertFalse(actionAllowed(name, ServiceAction.STOP))

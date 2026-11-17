@@ -15,6 +15,8 @@ enum class ServiceAction(val verb: String) { START("start"), STOP("stop"), RESTA
 
 internal val SAFE_NAME = Regex("[A-Za-z0-9_.-]+")
 
+private val NO_DAEMON = setOf("firewall")
+
 /** Parses `ubus call rc list`, sorted by name. */
 fun parseServices(json: String): List<Service> = try {
     Json.parseToJsonElement(json).jsonObject.mapNotNull { (name, value) ->
@@ -23,7 +25,8 @@ fun parseServices(json: String): List<Service> = try {
         Service(
             name = name,
             enabled = (state["enabled"] as? JsonPrimitive)?.booleanOrNull ?: false,
-            running = (state["running"] as? JsonPrimitive)?.booleanOrNull,
+            // fw4 loads its rules and exits, so "not running" says nothing about whether it protects.
+            running = if (name in NO_DAEMON) null else (state["running"] as? JsonPrimitive)?.booleanOrNull,
         )
     }.sortedBy { it.name }
 } catch (e: IllegalArgumentException) {
