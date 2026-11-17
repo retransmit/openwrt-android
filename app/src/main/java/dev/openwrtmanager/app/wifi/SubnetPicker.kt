@@ -33,9 +33,11 @@ fun networkOf(address: String, maskBits: Int): String? {
 /**
  * First free 192.168.N.0/24, N from 10 to 250, that overlaps none of the ranges in [used].
  * Entries that are not IPv4 CIDR are ignored. Null when every candidate is taken.
+ * [preferred] is returned instead when it is valid and free.
  */
-fun pickSubnet(used: List<String>): String? {
+fun pickSubnet(used: List<String>, preferred: String? = null): String? {
     val taken = used.mapNotNull(::parseCidr)
+    preferred?.let(::parseCidr)?.let { range -> if (taken.none { it.overlaps(range) }) return preferred }
     for (n in 10..250) {
         val candidate = "192.168.$n.0/24"
         val range = parseCidr(candidate)!!

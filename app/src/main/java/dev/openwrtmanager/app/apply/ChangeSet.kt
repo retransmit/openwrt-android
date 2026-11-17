@@ -12,6 +12,8 @@ data class ChangeSet(
     val batch: UciBatch,
     /** True when applying may briefly cut the phone off from the router (wireless, network, firewall). */
     val mayDropConnection: Boolean,
+    /** Interfaces this change creates, checked once it is applied. Never user text. */
+    val checkInterfaces: List<String> = emptyList(),
 ) {
     fun isEmpty(): Boolean = batch.isEmpty()
 
@@ -20,8 +22,8 @@ data class ChangeSet(
     companion object {
         private val DISRUPTIVE = setOf("wireless", "network", "firewall")
 
-        fun of(title: String, summary: List<String>, batch: UciBatch): ChangeSet =
-            ChangeSet(title, summary, batch, batch.configs.any { it in DISRUPTIVE })
+        fun of(title: String, summary: List<String>, batch: UciBatch, checkInterfaces: List<String> = emptyList()): ChangeSet =
+            ChangeSet(title, summary, batch, batch.configs.any { it in DISRUPTIVE }, checkInterfaces)
     }
 }
 

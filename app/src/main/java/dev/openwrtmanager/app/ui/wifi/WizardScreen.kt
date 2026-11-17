@@ -152,10 +152,14 @@ fun WizardScreen(
 private fun BlockReason.explain(): Pair<String, String> = when (this) {
     BlockReason.NO_UPLINK -> "Create this on your main router" to
         "This device passes traffic along but does not connect to the internet itself, so it cannot run a separate network. " +
-        "Switch to your main router and create the network there. Carrying it to access points comes with VLAN support in a later update."
+        "Switch to your main router and create the network there, then use \"Add a network from my router\" here to carry it to this device."
     BlockReason.NO_WAN_ZONE -> "No internet zone found" to
         "The firewall on this device has no zone for the internet connection, so the new network would have nowhere to go."
     BlockReason.NO_FREE_SUBNET -> "No free address range" to
         "Every range the app could use overlaps one that is already in use on this device."
     BlockReason.NO_RADIO -> "No Wi-Fi radio selected" to "Pick at least one band."
+    BlockReason.BAD_NAME -> "Pick another name" to
+        "Use up to 11 lowercase letters, digits or underscores, starting with a letter, and a name no other network uses."
+    BlockReason.VLAN_PROBLEM -> "These port settings would not work" to
+        "The VLAN ID is taken or out of range, or no port or Wi-Fi would be left on your home network. Change the ports and try again."
 }
