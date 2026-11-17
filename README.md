@@ -120,3 +120,21 @@ Known limits right now:
 - Each device is managed on its own. There is no "apply to all my access points" yet.
 - IPv6-only internet links are not detected as the uplink.
 - Firmware upgrades are out of scope.
+
+## License
+
+Copyright (C) 2026 retransmit
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE) for more details.
+
+SPDX-License-Identifier: GPL-3.0-or-later
+
+### Third-party software
+
+The app is built on libraries under the Apache License 2.0 (AndroidX, Jetpack Compose, Kotlin, kotlinx, Hilt, sshj, ZXing) and the Bouncy Castle licence (Bouncy Castle), which remain under their own terms.
+
+### Trademark
+
+OpenWrt is a trademark of its owners. This project is independent and is not affiliated with, sponsored by, or endorsed by the OpenWrt project.
