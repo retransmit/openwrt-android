@@ -1,0 +1,10 @@
+192.168.1.114 dev br-lan.1 lladdr 58:11:22:aa:00:03 REACHABLE 
+192.168.1.126 dev br-lan.1 lladdr ea:d5:c5:aa:00:02 STALE 
+192.168.1.192 dev br-lan.1 FAILED 
+192.168.1.170 dev br-lan.1 lladdr 02:00:00:aa:00:0b DELAY 
+192.168.1.171 dev br-lan.1 lladdr 02:00:00:aa:00:0c router PROBE 
+192.168.1.172 dev br-lan.1 INCOMPLETE 
+192.168.0.1 dev wan lladdr 8c:90:2d:aa:00:20 DELAY 
+192.168.0.2 dev wan lladdr 10:27:f5:aa:00:21 STALE 
+fe80::6918:5779:1242:de07 dev br-lan.1 lladdr 58:11:22:aa:00:03 STALE 
+fd00::1 dev br-lan.1 FAILED 

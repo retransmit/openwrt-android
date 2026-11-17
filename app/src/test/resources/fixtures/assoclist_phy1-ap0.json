@@ -1,0 +1,20 @@
+{
+	"results": [
+		{
+			"mac": "EA:D5:C5:AA:00:02",
+			"signal": -37,
+			"signal_avg": -38,
+			"noise": -95,
+			"inactive": 120,
+			"connected_time": 1280,
+			"thr": 0,
+			"authorized": true
+		},
+		{
+			"mac": "02:00:00:AA:00:0D",
+			"signal": -71,
+			"inactive": 3750,
+			"connected_time": 60
+		}
+	]
+}

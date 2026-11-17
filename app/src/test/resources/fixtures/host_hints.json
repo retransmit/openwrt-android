@@ -1,0 +1,5 @@
+{
+	"10:27:F5:AA:00:21": { "ipaddrs": [ "192.168.0.2" ], "ip6addrs": [ ] },
+	"58:11:22:AA:00:03": { "ipaddrs": [ "192.168.1.114" ], "ip6addrs": [ "fe80::6918:5779:1242:de07" ], "name": "Dexel.lan" },
+	"02:00:00:AA:00:0D": { "ipaddrs": [ ], "ip6addrs": [ ], "name": "Kitchen-Speaker" }
+}

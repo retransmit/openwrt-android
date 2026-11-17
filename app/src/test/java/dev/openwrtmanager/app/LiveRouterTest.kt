@@ -70,6 +70,29 @@ class LiveRouterTest {
 
     /** Phase 2 reads: config snapshots, the Wi-Fi model, and what the guest wizard would do. Nothing is staged. */
     @Test
+    fun client_sources_read_on_real_routers() = runBlocking<Unit> {
+        val hosts = System.getenv("OWM_LIVE_HOSTS")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+        val keyPath = System.getenv("OWM_LIVE_KEY").orEmpty()
+        assumeTrue("live router test not configured", hosts.isNotEmpty() && keyPath.isNotEmpty())
+        val key = File(keyPath).readText()
+
+        for (host in hosts) {
+            val fingerprint = SshjExecutor.probeFingerprint(host, 22)
+            val ssh = SshjExecutor(SshTarget(host, 22, "root", AuthType.KEY, key, fingerprint))
+            try {
+                val readings = dev.openwrtmanager.app.clients.ClientSources(ssh).read()
+                assertTrue("all MACs upper case on $host", (readings.leases.map { it.mac } + readings.neighbours.map { it.mac }).all { it == it.uppercase() })
+                println(
+                    "LIVE clients on $host: ${readings.leases.size} leases, ${readings.associations.size} Wi-Fi, " +
+                        "${readings.neighbours.size} neighbours, ${readings.hintNames.size} hints, missing=${readings.missing}",
+                )
+            } finally {
+                ssh.close()
+            }
+        }
+    }
+
+    @Test
     fun wifi_config_and_wizard_planning_work_on_real_routers() = runBlocking<Unit> {
         val hosts = System.getenv("OWM_LIVE_HOSTS")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
         val keyPath = System.getenv("OWM_LIVE_KEY").orEmpty()
