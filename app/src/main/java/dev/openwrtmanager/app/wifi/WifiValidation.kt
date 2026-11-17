@@ -13,9 +13,13 @@ fun validateSsid(ssid: String): SsidError? = when {
     else -> null
 }
 
-/** A WPA passphrase is 8 to 63 printable ASCII characters. Open networks have none. */
+/**
+ * A WPA passphrase is 8 to 63 printable ASCII characters, or the raw key as exactly 64 hex digits.
+ * Open networks have none.
+ */
 fun validateKey(key: String, security: Security): KeyError? = when {
     security == Security.OPEN -> null
+    key.length == 64 && key.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' } -> null
     key.any { it.code !in 0x20..0x7e } -> KeyError.NOT_ASCII
     key.length < 8 -> KeyError.TOO_SHORT
     key.length > 63 -> KeyError.TOO_LONG

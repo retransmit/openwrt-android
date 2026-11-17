@@ -11,6 +11,7 @@ import dev.openwrtmanager.app.apply.ForeignChangesException
 import dev.openwrtmanager.app.apply.HealthProblem
 import dev.openwrtmanager.app.apply.SafeApply
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,8 +86,9 @@ class ApplyViewModel @Inject constructor(
         if (review.loadingChanges) return
         _ui.value = ApplyUi.Working(ApplyPhase.Staging, ROLLBACK_SECONDS)
         viewModelScope.launch {
-            // Counts down once and stops: there is nothing left to count after zero.
-            val ticker = launch {
+            // Starts when the script is sent, which is when the router arms its timer, and counts down
+            // once: there is nothing left to count after zero.
+            val ticker = launch(start = CoroutineStart.LAZY) {
                 repeat(ROLLBACK_SECONDS) {
                     delay(1_000)
                     _ui.update { if (it is ApplyUi.Working) it.copy(secondsLeft = (it.secondsLeft - 1).coerceAtLeast(0)) else it }
@@ -97,6 +99,7 @@ class ApplyViewModel @Inject constructor(
                 withSession { session ->
                     val result = session.applier.apply(review.change) { phase ->
                         _ui.update { if (it is ApplyUi.Working) it.copy(phase = phase) else it }
+                        if (phase == ApplyPhase.Committing) ticker.start()
                     }
                     ticker.cancel()
                     if (result == ApplyOutcome.Applied && review.change.checkInterfaces.isNotEmpty()) {
@@ -112,13 +115,22 @@ class ApplyViewModel @Inject constructor(
                 ticker.cancel()
             }
             _ui.value = ApplyUi.Done(outcome, problems)
-            if (outcome == ApplyOutcome.Applied) onApplied()
         }
     }
 
-    /** Closes the sheet. Ignored while a change is being applied: that must run to its end. */
+    /**
+     * Closes the sheet. Ignored while a change is being applied: that must run to its end. After a
+     * change was applied, the screen behind is told only now, so the result stays readable until then.
+     */
     fun dismiss() {
-        if (_ui.value !is ApplyUi.Working) _ui.value = ApplyUi.Idle
+        val current = _ui.value
+        if (current is ApplyUi.Working) return
+        _ui.value = ApplyUi.Idle
+        if (current is ApplyUi.Done && current.outcome == ApplyOutcome.Applied) {
+            val notify = onApplied
+            onApplied = {}
+            notify()
+        }
     }
 
     private suspend fun <T> withSession(block: suspend (ApplySession) -> T): T? {
