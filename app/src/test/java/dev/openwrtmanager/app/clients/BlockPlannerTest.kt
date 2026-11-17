@@ -28,7 +28,7 @@ class BlockPlannerTest {
             listOf(
                 "set firewall.owm_blocked=ipset",
                 "set firewall.owm_blocked.name='owm_blocked'",
-                "add_list firewall.owm_blocked.match='src_mac'",
+                "set firewall.owm_blocked.match='src_mac'",
                 "add_list firewall.owm_blocked.entry='AA:BB:CC:DD:EE:FF'",
                 "set firewall.owm_blocked_drop=include",
                 "set firewall.owm_blocked_drop.type='nftables'",
@@ -69,6 +69,18 @@ class BlockPlannerTest {
     fun unblocking_a_mac_that_is_not_blocked_is_empty() {
         assertTrue(BlockPlanner.unblock(withBlocks("AA:BB:CC:DD:EE:FF"), "11:22:33:44:55:66", "X").isEmpty())
         assertTrue(BlockPlanner.unblock(firewall, "11:22:33:44:55:66", "X").isEmpty())
+    }
+
+    @Test
+    fun non_mac_entries_are_ignored_not_crashed_on() {
+        assertEquals(listOf("AA:BB:CC:DD:EE:FF"), BlockPlanner.blockedMacs(withBlocks("AA:BB:CC:DD:EE:FF", "garbage", "10.0.0.1")))
+    }
+
+    @Test
+    fun ensure_file_command_keeps_the_file_across_upgrades() {
+        val command = BlockPlanner.ensureFileCommand()
+        assertTrue(command.contains("/etc/sysupgrade.conf"))
+        assertTrue("only added once", command.contains("grep -qx '/etc/owm/' /etc/sysupgrade.conf"))
     }
 
     @Test

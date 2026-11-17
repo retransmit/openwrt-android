@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 sealed interface ClientsUi {
@@ -50,6 +51,8 @@ class ClientsViewModel @Inject constructor(
 
     private var config: DeviceConfig? = null
     private var myAddress: String? = null
+    private var fileChecked = false
+    private val loading = kotlinx.coroutines.sync.Mutex()
 
     /** Refreshes every 5 s until cancelled; the screen runs this only while it is visible. */
     suspend fun poll() {
@@ -63,16 +66,18 @@ class ClientsViewModel @Inject constructor(
         viewModelScope.launch { load() }
     }
 
-    private suspend fun load() {
+    private suspend fun load() = loading.withLock {
         val gateway = gateways.current()
         if (gateway == null) {
             _ui.value = ClientsUi.Offline
-            return
+            return@withLock
         }
         try {
             val deviceConfig = gateway.config()
             val readings = gateway.readings()
             if (myAddress == null) myAddress = gateway.myAddress()
+            // An upgrade that kept settings may have lost the include file; without it blocks do nothing.
+            if (!fileChecked && BlockPlanner.blockedMacs(deviceConfig.firewall).isNotEmpty()) fileChecked = gateway.ensureBlockFile()
             config = deviceConfig
             val clients = mergeClients(readings, deviceConfig)
             val message = (_ui.value as? ClientsUi.Ready)?.message
@@ -112,8 +117,23 @@ class ClientsViewModel @Inject constructor(
         }
     }
 
-    fun reserve(client: Client, ip: String, name: String): ChangeSet? {
-        val deviceConfig = config ?: return null
+    /**
+     * Changes are planned from the router's config as it is now, never from the copy the list was
+     * drawn from: that may be seconds old, or from another device after a switch.
+     */
+    private suspend fun freshConfig(): DeviceConfig? = try {
+        gateways.current()?.config()?.also { config = it }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    } ?: run {
+        say("Could not read the router's current settings. Nothing was changed.")
+        null
+    }
+
+    suspend fun reserve(client: Client, ip: String, name: String): ChangeSet? {
+        val deviceConfig = freshConfig() ?: return null
         return when (val planned = Reservations.add(deviceConfig.dhcp, deviceConfig.network, client.mac, ip, name)) {
             is Planned.Ready -> planned.change
             is Planned.Problem -> {
@@ -123,9 +143,8 @@ class ClientsViewModel @Inject constructor(
         }
     }
 
-    /** Puts the fixed include file in place first; without it the firewall must not reference it. */
+    /** Puts the fixed include file in place first; without it the block would do nothing. */
     suspend fun block(client: Client): ChangeSet? {
-        val deviceConfig = config ?: return null
         val written = try {
             gateways.current()?.ensureBlockFile() == true
         } catch (e: CancellationException) {
@@ -137,12 +156,13 @@ class ClientsViewModel @Inject constructor(
             say("Could not prepare the block on the router. Nothing was changed.")
             return null
         }
+        val deviceConfig = freshConfig() ?: return null
         return BlockPlanner.block(deviceConfig.firewall, client.mac, label(client))
     }
 
-    fun unblock(client: Client): ChangeSet {
-        val firewall = config?.firewall ?: return BlockPlanner.unblock(dev.openwrtmanager.app.uci.UciConfig("firewall", emptyList()), client.mac, label(client))
-        return BlockPlanner.unblock(firewall, client.mac, label(client))
+    suspend fun unblock(client: Client): ChangeSet? {
+        val deviceConfig = freshConfig() ?: return null
+        return BlockPlanner.unblock(deviceConfig.firewall, client.mac, label(client))
     }
 
     private fun say(message: String) = _ui.update { if (it is ClientsUi.Ready) it.copy(message = message) else it }

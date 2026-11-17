@@ -108,12 +108,14 @@ internal fun ClientSheet(
             onDismiss = { confirm = null },
         ) {
             confirm = null
-            onReview(viewModel.unblock(client))
+            scope.launch { viewModel.unblock(client)?.let(onReview) }
         }
         Confirm.RESERVE -> ReserveDialog(client, onDismiss = { confirm = null }) { ip, hostName ->
-            viewModel.reserve(client, ip, hostName)?.let {
-                confirm = null
-                onReview(it)
+            scope.launch {
+                viewModel.reserve(client, ip, hostName)?.let {
+                    confirm = null
+                    onReview(it)
+                }
             }
         }
         null -> Unit

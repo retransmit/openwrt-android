@@ -47,7 +47,11 @@ fun reservationsOf(dhcp: UciConfig): List<Reservation> = dhcp.ofType("host").fla
  * count, because VPN zones such as Tailscale masquerade too.
  */
 private fun wanZoneNetworks(firewall: UciConfig): Set<String> =
-    firewall.ofType("zone").filter { "wan" in it.list("network") }.flatMap { it.list("network") }.toSet()
+    firewall.ofType("zone").map(::zoneNetworks).filter { "wan" in it }.flatten().toSet()
+
+/** A zone's networks; old configs write them as one space-separated string. */
+private fun zoneNetworks(zone: dev.openwrtmanager.app.uci.UciSection): List<String> =
+    zone.list("network").flatMap { it.split(' ', '\t') }.filter { it.isNotEmpty() }
 
 /** Devices on the internet side, by config and by what netifd reports, so they count even while WAN is down. */
 fun wanDevices(config: DeviceConfig): Set<String> = wanZoneNetworks(config.firewall).flatMap { iface ->
@@ -105,12 +109,24 @@ data class ClientActions(val reconnect: Boolean, val reserve: Boolean, val block
 fun actionsFor(client: Client, config: DeviceConfig): ClientActions {
     val reserve = client.ip != null && servingPool(client.ip, config) != null
     val wanZone = wanZoneNetworks(config.firewall).any { config.network[it]?.type == "interface" }
+    // A client on a network that has its own gateway is bridged to another router: its traffic never
+    // passes this device's forward chain, so a block here would do nothing.
+    val routedHere = client.ip?.let { ip -> interfaceHolding(ip, config)?.opt("gateway") == null } ?: true
     return ClientActions(
         reconnect = client.link == ClientLink.WIFI && client.ifname != null,
         reserve = reserve,
-        block = config.firewallEnabled && wanZone,
+        block = config.firewallEnabled && wanZone && routedHere,
     )
 }
+
+/** The interface whose configured subnet holds [ip]. */
+private fun interfaceHolding(ip: String, config: DeviceConfig): dev.openwrtmanager.app.uci.UciSection? =
+    config.network.ofType("interface").firstOrNull { section ->
+        configuredSubnets(UciConfig("network", listOf(section))).any { cidr ->
+            val bits = cidr.substringAfter('/').toIntOrNull() ?: return@any false
+            bits < 32 && networkOf(ip, bits) == cidr
+        }
+    }
 
 /** The interface whose active DHCP pool hands out [ip], if any. */
 fun servingPool(ip: String, config: DeviceConfig): String? = config.dhcp.ofType("dhcp").firstNotNullOfOrNull { pool ->
