@@ -1,0 +1,97 @@
+{
+	"values": {
+		"loopback": {
+			".anonymous": false,
+			".type": "interface",
+			".name": "loopback",
+			".index": 0,
+			"device": "lo",
+			"proto": "static",
+			"ipaddr": [
+				"127.0.0.1/8"
+			]
+		},
+		"globals": {
+			".anonymous": false,
+			".type": "globals",
+			".name": "globals",
+			".index": 1,
+			"ula_prefix": "fd00:1234:5678::/48"
+		},
+		"cfg030f15": {
+			".anonymous": true,
+			".type": "device",
+			".name": "cfg030f15",
+			".index": 2,
+			"name": "br-lan",
+			"type": "bridge",
+			"ports": [
+				"lan1",
+				"lan2",
+				"lan3",
+				"lan4"
+			]
+		},
+		"vlan_lan": {
+			".anonymous": false,
+			".type": "bridge-vlan",
+			".name": "vlan_lan",
+			".index": 3,
+			"device": "br-lan",
+			"vlan": "1",
+			"ports": [
+				"lan1:u*",
+				"lan2:u*",
+				"lan3:u*",
+				"lan4:u*"
+			]
+		},
+		"vlan_guest": {
+			".anonymous": false,
+			".type": "bridge-vlan",
+			".name": "vlan_guest",
+			".index": 4,
+			"device": "br-lan",
+			"vlan": "10",
+			"ports": [
+				"lan4:t"
+			]
+		},
+		"lan": {
+			".anonymous": false,
+			".type": "interface",
+			".name": "lan",
+			".index": 5,
+			"device": "br-lan.1",
+			"proto": "static",
+			"ipaddr": "192.168.1.1/24",
+			"ip6assign": "60"
+		},
+		"guest": {
+			".anonymous": false,
+			".type": "interface",
+			".name": "guest",
+			".index": 6,
+			"proto": "static",
+			"device": "br-lan.10",
+			"ipaddr": "192.168.10.1",
+			"netmask": "255.255.255.0"
+		},
+		"wan": {
+			".anonymous": false,
+			".type": "interface",
+			".name": "wan",
+			".index": 7,
+			"device": "wan",
+			"proto": "dhcp"
+		},
+		"wan6": {
+			".anonymous": false,
+			".type": "interface",
+			".name": "wan6",
+			".index": 8,
+			"device": "wan",
+			"proto": "dhcpv6"
+		}
+	}
+}
