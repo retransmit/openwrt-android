@@ -20,11 +20,18 @@ class WifiValidationTest {
     }
 
     @Test
+    fun sixty_four_hex_key_is_valid() {
+        assertNull(validateKey("0123456789abcdefABCDEF".repeat(3).take(64), Security.WPA2))
+        assertNull(validateKey("f".repeat(64), Security.WPA2_WPA3))
+    }
+
+    @Test
     fun key_must_be_eight_to_sixty_three_printable_ascii() {
         assertEquals(KeyError.TOO_SHORT, validateKey("1234567", Security.WPA2))
         assertNull(validateKey("12345678", Security.WPA2))
         assertNull(validateKey("a".repeat(63), Security.WPA3))
-        assertEquals(KeyError.TOO_LONG, validateKey("a".repeat(64), Security.WPA2_WPA3))
+        assertEquals(KeyError.TOO_LONG, validateKey("g".repeat(64), Security.WPA2_WPA3))
+        assertEquals(KeyError.TOO_LONG, validateKey("a".repeat(65), Security.WPA2))
         assertEquals(KeyError.NOT_ASCII, validateKey("pässwörd1", Security.WPA2))
         assertNull(validateKey("with space; 'quotes' \"too\"", Security.WPA2))
     }

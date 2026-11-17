@@ -112,8 +112,47 @@ class ApplyViewModelTest {
         outcome.complete(ApplyOutcome.Applied)
         runCurrent()
         assertEquals(ApplyUi.Done(ApplyOutcome.Applied), vm.ui.value)
-        assertEquals(1, applied)
         assertEquals("preview and apply sessions are both closed", 2, sessionsClosed)
+        vm.dismiss()
+        assertEquals(1, applied)
+    }
+
+    @Test
+    fun applied_result_stays_until_dismissed() = runTest(dispatcher) {
+        var applied = 0
+        val vm = viewModel()
+        vm.review(change) { applied++ }
+        runCurrent()
+        vm.confirm()
+        runCurrent()
+        outcome.complete(ApplyOutcome.Applied)
+        runCurrent()
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertEquals(ApplyUi.Done(ApplyOutcome.Applied), vm.ui.value)
+        assertEquals("the screen behind must not move on while the result is shown", 0, applied)
+        vm.dismiss()
+        assertEquals(ApplyUi.Idle, vm.ui.value)
+        assertEquals(1, applied)
+        vm.dismiss()
+        assertEquals("notified once", 1, applied)
+    }
+
+    @Test
+    fun countdown_starts_at_committing_not_at_tap() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.review(change) {}
+        runCurrent()
+        vm.confirm()
+        runCurrent()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertEquals(90, (vm.ui.value as ApplyUi.Working).secondsLeft)
+        phaseSink!!(ApplyPhase.Committing)
+        runCurrent()
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals(88, (vm.ui.value as ApplyUi.Working).secondsLeft)
     }
 
     @Test
@@ -122,6 +161,8 @@ class ApplyViewModelTest {
         vm.review(change) {}
         runCurrent()
         vm.confirm()
+        runCurrent()
+        phaseSink!!(ApplyPhase.Committing)
         runCurrent()
         advanceTimeBy(3_000)
         runCurrent()
