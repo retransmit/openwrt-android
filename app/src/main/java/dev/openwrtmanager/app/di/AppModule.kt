@@ -158,6 +158,14 @@ object WifiModule {
     }
 
     @Provides
+    fun clientsGatewayProvider(
+        connection: dev.openwrtmanager.app.connection.ConnectionManager,
+    ): dev.openwrtmanager.app.clients.ClientsGatewayProvider = dev.openwrtmanager.app.clients.ClientsGatewayProvider {
+        (connection.state.value as? dev.openwrtmanager.app.connection.ConnectionState.Online)
+            ?.let { dev.openwrtmanager.app.clients.SshClientsGateway(it.ssh) }
+    }
+
+    @Provides
     fun passwordSource(): dev.openwrtmanager.app.ui.wifi.PasswordSource {
         val random = java.security.SecureRandom()
         return dev.openwrtmanager.app.ui.wifi.PasswordSource { dev.openwrtmanager.app.ui.wifi.generateWifiPassword(random) }

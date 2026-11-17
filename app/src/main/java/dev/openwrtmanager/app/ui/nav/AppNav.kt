@@ -149,6 +149,7 @@ private fun MainTabs(
         when (tab) {
             Tab.HOME -> HomeScreen(onSwitchDevice = { switcherOpen = true }, onAddDevice = onAddDevice)
             Tab.NETWORK -> dev.openwrtmanager.app.ui.network.VlanScreen()
+            Tab.CLIENTS -> dev.openwrtmanager.app.ui.clients.ClientsScreen()
             Tab.WIFI -> WifiScreen(onEditNetwork = onEditNetwork, onWizard = onWizard, onMirror = onMirror)
             else -> ComingLater(tab)
         }

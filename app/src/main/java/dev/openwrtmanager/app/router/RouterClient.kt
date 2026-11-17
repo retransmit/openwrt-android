@@ -39,6 +39,12 @@ class RouterClient(private val ssh: SshExecutor) {
         return dump.uplinkDevice(clientNetworks)
     }
 
+    /** Interface name to the device it currently runs on (for example wan to pppoe-wan). Interfaces that are down are left out. */
+    suspend fun l3Devices(): Map<String, String> =
+        ubus("ubus call network.interface dump", InterfaceDumpDto.serializer()).interfaces
+            .mapNotNull { iface -> iface.l3Device?.takeIf { it.isNotEmpty() }?.let { iface.name to it } }
+            .toMap()
+
     /** IPv4 ranges already in use on this device, as CIDR strings, one per configured address. */
     suspend fun usedSubnets(): List<String> =
         ubus("ubus call network.interface dump", InterfaceDumpDto.serializer()).interfaces
