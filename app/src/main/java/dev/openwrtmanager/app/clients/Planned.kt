@@ -8,12 +8,14 @@ sealed interface Planned<out P> {
     data class Problem<P>(val problem: P) : Planned<P>
 }
 
+/** Dotted IPv4 in canonical form only: ASCII digits, no leading zeros, as dnsmasq and musl read it. */
 internal fun ipv4ToLong(address: String): Long? {
     val parts = address.split('.')
     if (parts.size != 4) return null
     var value = 0L
     for (part in parts) {
-        if (part.isEmpty() || part.length > 3 || part.any { !it.isDigit() }) return null
+        if (part.isEmpty() || part.length > 3 || part.any { it !in '0'..'9' }) return null
+        if (part.length > 1 && part[0] == '0') return null
         val octet = part.toInt().takeIf { it in 0..255 } ?: return null
         value = value * 256 + octet
     }

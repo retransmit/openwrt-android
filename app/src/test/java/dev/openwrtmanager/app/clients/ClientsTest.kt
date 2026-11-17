@@ -172,6 +172,36 @@ class ClientsTest {
     }
 
     @Test
+    fun old_style_zone_network_string_is_split() {
+        val oldStyle = router.copy(
+            firewall = UciConfig(
+                "firewall",
+                router.firewall.sections.map {
+                    if (it.type == "zone" && it.opt("name") == "wan") it.copy(options = it.options + ("network" to "wan wan6"), lists = it.lists - "network") else it
+                },
+            ),
+        )
+        val upstream = readings(neighbours = listOf(Neighbour("192.168.0.1", "wan", "8C:90:2D:AA:00:20")))
+        assertTrue(mergeClients(upstream, oldStyle).isEmpty())
+        val home = Client(pc, null, "192.168.1.114", ClientLink.WIRED, null, null, null, null, null, false, false)
+        assertTrue(actionsFor(home, oldStyle).block)
+    }
+
+    @Test
+    fun access_point_that_kept_its_wan_interface_offers_no_block() {
+        val keptWan = accessPoint.copy(
+            network = UciConfig(
+                "network",
+                accessPoint.network.sections + UciSection("wan", "interface", false, 80, mapOf("device" to "wan", "proto" to "dhcp"), emptyMap()),
+            ),
+        )
+        val station = Client(phone, null, "192.168.0.50", ClientLink.WIFI, "Home", Band.GHZ_5, "phy1-ap0", -50, 10, false, false)
+        assertFalse("its lan has a gateway: traffic is bridged, not routed here", actionsFor(station, keptWan).block)
+        val offline = station.copy(ip = null, link = ClientLink.OFFLINE, blocked = true)
+        assertTrue("an existing block can still be lifted", actionsFor(offline, router).block)
+    }
+
+    @Test
     fun wired_client_cannot_reconnect() {
         val home = Client(pc, null, "192.168.1.114", ClientLink.WIRED, null, null, null, null, null, false, false)
         assertFalse(actionsFor(home, router).reconnect)

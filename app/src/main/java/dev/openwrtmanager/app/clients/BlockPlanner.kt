@@ -27,7 +27,7 @@ object BlockPlanner {
     private const val F = "firewall"
 
     fun blockedMacs(firewall: UciConfig): List<String> =
-        firewall[SET]?.takeIf { it.type == "ipset" }?.list("entry").orEmpty().map(::normalMac)
+        firewall[SET]?.takeIf { it.type == "ipset" }?.list("entry").orEmpty().filter(::isMac).map(::normalMac)
 
     fun block(firewall: UciConfig, mac: String, deviceName: String): ChangeSet {
         require(isMac(mac)) { "not a MAC address" }
@@ -38,7 +38,8 @@ object BlockPlanner {
             if (firewall[SET] == null) {
                 batch.section(F, SET, "ipset")
                 batch.set(F, SET, "name", SET)
-                batch.addList(F, SET, "match", "src_mac")
+                // `set`, not `add_list`: a second src_mac would turn the set into a concatenated type and break fw4.
+                batch.set(F, SET, "match", "src_mac")
             }
             batch.addList(F, SET, "entry", target)
             if (firewall[INCLUDE] == null) {
@@ -74,11 +75,16 @@ object BlockPlanner {
         return ChangeSet.of("Unblock device", listOf("Unblock $deviceName ($target)"), batch)
     }
 
-    /** Writes [FILE_PATH] only when it is missing or different, through a temp file. */
+    /**
+     * Writes [FILE_PATH] only when it is missing or different, through a temp file, and lists
+     * /etc/owm/ in sysupgrade.conf so an upgrade that keeps settings keeps the file too. fw4 skips an
+     * include whose file is missing, so without it blocks would silently stop working.
+     */
     fun ensureFileCommand(): String {
         val tmp = "/etc/owm/.blocked.nft.tmp"
         return "mkdir -p /etc/owm && printf '%s\\n' '${FILE_CONTENT.trimEnd()}' > $tmp && " +
-            "{ if cmp -s $tmp $FILE_PATH; then rm -f $tmp; else mv $tmp $FILE_PATH; fi; }"
+            "{ if cmp -s $tmp $FILE_PATH; then rm -f $tmp; else mv $tmp $FILE_PATH; fi; } && " +
+            "{ grep -qx '/etc/owm/' /etc/sysupgrade.conf || echo '/etc/owm/' >> /etc/sysupgrade.conf; }"
     }
 
     fun offloadingOn(firewall: UciConfig): Boolean = firewall.ofType("defaults").any { it.flag("flow_offloading") }

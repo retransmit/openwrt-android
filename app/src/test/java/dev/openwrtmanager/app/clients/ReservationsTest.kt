@@ -43,6 +43,13 @@ class ReservationsTest {
     }
 
     @Test
+    fun only_canonical_addresses_are_accepted() {
+        for (odd in listOf("192.168.1.050", "192.168.1.01", "192.168.001.50", "١٩٢.168.1.50", " 192.168.1.50")) {
+            assertEquals(odd, Planned.Problem(ReservationProblem.BadIp), Reservations.add(dhcp, network, tv, odd, "tv"))
+        }
+    }
+
+    @Test
     fun router_address_is_refused() {
         assertEquals(Planned.Problem(ReservationProblem.RouterAddress), Reservations.add(dhcp, network, tv, "192.168.1.1", "tv"))
     }

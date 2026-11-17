@@ -107,9 +107,53 @@ class ClientsViewModelTest {
     @Test
     fun unblock_returns_the_change() = runTest {
         val vm = viewModel().also { it.refresh() }
-        val change = vm.unblock(ready(vm).online.first { it.mac == phone })
+        val change = vm.unblock(ready(vm).online.first { it.mac == phone })!!
         assertTrue("not blocked, nothing to do", change.isEmpty())
     }
+
+    private fun blocking(vararg macs: String) = gateway.config.copy(
+        firewall = UciConfig(
+            "firewall",
+            routerFirewall().sections +
+                UciSection("owm_blocked", "ipset", false, 90, mapOf("name" to "owm_blocked", "match" to "src_mac"), mapOf("entry" to macs.toList())) +
+                UciSection("owm_blocked_drop", "include", false, 91, mapOf("type" to "nftables"), emptyMap()),
+        ),
+    )
+
+    private fun routerFirewall() = dev.openwrtmanager.app.testing.routerDeviceConfig().firewall
+
+    @Test
+    fun block_is_planned_from_the_routers_current_config() = runTest {
+        val vm = viewModel().also { it.refresh() }
+        val pc = ready(vm).online.first { it.mac == "58:11:22:AA:00:03" }
+        // Another block landed after the screen last refreshed.
+        gateway.config = blocking(phone)
+        val lines = vm.block(pc)!!.batch.script().lines()
+        assertEquals(listOf("add_list firewall.owm_blocked.entry='58:11:22:AA:00:03'"), lines)
+    }
+
+    @Test
+    fun unblock_is_planned_from_the_routers_current_config() = runTest {
+        gateway.config = blocking(phone)
+        val vm = viewModel().also { it.refresh() }
+        val client = ready(vm).online.first { it.mac == phone }
+        // A second block landed meanwhile: lifting this one must not remove the whole set.
+        gateway.config = blocking(phone, "58:11:22:AA:00:03")
+        assertEquals(listOf("del_list firewall.owm_blocked.entry='$phone'"), vm.unblock(client)!!.batch.script().lines())
+    }
+
+    @Test
+    fun a_missing_block_file_is_restored_when_blocks_exist() = runTest {
+        gateway.config = blocking(phone)
+        viewModel().also { it.refresh() }
+        assertEquals(1, gateway.fileWrites)
+        gateway.config = routerDeviceConfigNoBlocks()
+        val other = FakeClientsGateway()
+        ClientsViewModel { other }.also { it.refresh() }
+        assertEquals("no blocks, no file write", 0, other.fileWrites)
+    }
+
+    private fun routerDeviceConfigNoBlocks() = dev.openwrtmanager.app.testing.routerDeviceConfig()
 
     @Test
     fun this_phone_is_recognised() = runTest {
