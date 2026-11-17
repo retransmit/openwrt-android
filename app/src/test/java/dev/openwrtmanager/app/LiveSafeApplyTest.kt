@@ -141,4 +141,53 @@ class LiveSafeApplyTest {
             ssh.close()
         }
     }
+
+    /** The VLAN version of the guest plan, against a scratch copy: filtering on, VLAN 10, guest on br-lan.10. */
+    @Test
+    fun vlan_guest_plan_is_accepted_in_a_scratch_copy() = runBlocking<Unit> {
+        val host = System.getenv("OWM_LIVE_HOSTS")?.split(',')?.firstOrNull()?.trim().orEmpty()
+        val keyPath = System.getenv("OWM_LIVE_KEY").orEmpty()
+        assumeTrue("live router test not configured", host.isNotEmpty() && keyPath.isNotEmpty())
+
+        val fingerprint = SshjExecutor.probeFingerprint(host, 22)
+        val ssh = SshjExecutor(SshTarget(host, 22, "root", AuthType.KEY, File(keyPath).readText(), fingerprint))
+        val dir = "/tmp/owm-test-" + System.nanoTime().toString(16)
+        val uci = "uci -c $dir/config -t $dir/save"
+        try {
+            val copied = ssh.exec(
+                "mkdir -p $dir/config $dir/save && cp /etc/config/wireless /etc/config/network /etc/config/firewall /etc/config/dhcp $dir/config/",
+            )
+            assertEquals(0, copied.exitCode)
+
+            val snapshot = dev.openwrtmanager.app.wifi.SshWifiGateway(ssh).snapshot()
+            val radios = dev.openwrtmanager.app.wifi.wifiConfigOf(snapshot.wireless).radios.map { it.name }.toSet()
+            val plan = dev.openwrtmanager.app.wifi.NetworkWizard.plan(
+                snapshot,
+                dev.openwrtmanager.app.wifi.WizardInput(
+                    dev.openwrtmanager.app.wifi.WizardKind.GUEST, "Scratch VLAN Guest", dev.openwrtmanager.app.wifi.Security.WPA2_WPA3,
+                    "scratch pass 123", radios,
+                ),
+            ) as dev.openwrtmanager.app.wifi.WizardPlan.Ready
+            assertEquals(10, plan.vid)
+
+            val apply = SafeApply(ssh, { System.currentTimeMillis() }, "$dir/config", 6, uci, "true", holdOffMs = 1_000)
+            assertEquals(ApplyOutcome.Applied, apply.apply(plan.change))
+
+            suspend fun get(path: String) = ssh.exec("$uci -q get $path").stdout.trim()
+            val name = plan.networkName
+            assertEquals("1", get("network.vlan_lan.vlan"))
+            assertEquals("br-lan", get("network.vlan_lan.device"))
+            assertEquals("lan1:u* lan2:u* lan3:u* lan4:u*", get("network.vlan_lan.ports"))
+            assertEquals("br-lan.1", get("network.lan.device"))
+            assertEquals("10", get("network.vlan_$name.vlan"))
+            assertEquals("br-lan.10", get("network.$name.device"))
+            assertEquals(name, get("wireless.${name}_${radios.first()}.network"))
+            assertEquals("the real config is untouched", "", ssh.exec("uci changes").stdout.trim())
+            assertEquals("br-lan", ssh.exec("uci -q get network.lan.device").stdout.trim())
+            println("LIVE VLAN plan on $host: ${plan.change.batch.script().lines().size} uci lines accepted, real config untouched")
+        } finally {
+            ssh.exec("rm -rf $dir /tmp/owm-apply-*")
+            ssh.close()
+        }
+    }
 }
