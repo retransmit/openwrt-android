@@ -138,7 +138,10 @@ object ApplyModule {
                 profile.host, profile.port, profile.username, profile.authType, secret, profile.hostKeyFingerprint,
             ),
         )
-        dev.openwrtmanager.app.ui.apply.ApplySession(dev.openwrtmanager.app.apply.SafeApply(executor, time)) { executor.close() }
+        dev.openwrtmanager.app.ui.apply.ApplySession(
+            dev.openwrtmanager.app.apply.SafeApply(executor, time),
+            health = { names -> dev.openwrtmanager.app.apply.HealthCheck(executor).check(names) },
+        ) { executor.close() }
     }
 }
 

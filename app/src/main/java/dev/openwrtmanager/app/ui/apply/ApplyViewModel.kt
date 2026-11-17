@@ -8,6 +8,7 @@ import dev.openwrtmanager.app.apply.ApplyOutcome
 import dev.openwrtmanager.app.apply.ApplyPhase
 import dev.openwrtmanager.app.apply.ChangeSet
 import dev.openwrtmanager.app.apply.ForeignChangesException
+import dev.openwrtmanager.app.apply.HealthProblem
 import dev.openwrtmanager.app.apply.SafeApply
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -21,7 +22,12 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /** An applier on its own connection, so applying is independent of whatever else is polling the device. */
-class ApplySession(val applier: Applier, private val onClose: suspend () -> Unit) {
+class ApplySession(
+    val applier: Applier,
+    /** Checks the interfaces a change created, once it is applied. */
+    val health: suspend (List<String>) -> List<HealthProblem> = { emptyList() },
+    private val onClose: suspend () -> Unit,
+) {
     suspend fun close() = onClose()
 }
 
@@ -34,7 +40,7 @@ sealed interface ApplyUi {
     data object Idle : ApplyUi
     data class Review(val change: ChangeSet, val rawChanges: String?, val loadingChanges: Boolean) : ApplyUi
     data class Working(val phase: ApplyPhase, val secondsLeft: Int) : ApplyUi
-    data class Done(val outcome: ApplyOutcome) : ApplyUi
+    data class Done(val outcome: ApplyOutcome, val problems: List<HealthProblem> = emptyList()) : ApplyUi
 }
 
 /** Drives the review, apply and result steps for one change at a time. */
@@ -53,7 +59,7 @@ class ApplyViewModel @Inject constructor(
         _ui.value = ApplyUi.Review(change, rawChanges = null, loadingChanges = true)
         viewModelScope.launch {
             val raw: String? = try {
-                withSession { it.preview(change) }
+                withSession { it.applier.preview(change) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ForeignChangesException) {
@@ -86,11 +92,17 @@ class ApplyViewModel @Inject constructor(
                     _ui.update { if (it is ApplyUi.Working) it.copy(secondsLeft = (it.secondsLeft - 1).coerceAtLeast(0)) else it }
                 }
             }
+            var problems = emptyList<HealthProblem>()
             val outcome = try {
-                withSession { applier ->
-                    applier.apply(review.change) { phase ->
+                withSession { session ->
+                    val result = session.applier.apply(review.change) { phase ->
                         _ui.update { if (it is ApplyUi.Working) it.copy(phase = phase) else it }
                     }
+                    ticker.cancel()
+                    if (result == ApplyOutcome.Applied && review.change.checkInterfaces.isNotEmpty()) {
+                        problems = runCatching { session.health(review.change.checkInterfaces) }.getOrDefault(emptyList())
+                    }
+                    result
                 } ?: ApplyOutcome.Rejected("Not connected to the device")
             } catch (e: CancellationException) {
                 throw e
@@ -99,7 +111,7 @@ class ApplyViewModel @Inject constructor(
             } finally {
                 ticker.cancel()
             }
-            _ui.value = ApplyUi.Done(outcome)
+            _ui.value = ApplyUi.Done(outcome, problems)
             if (outcome == ApplyOutcome.Applied) onApplied()
         }
     }
@@ -109,10 +121,10 @@ class ApplyViewModel @Inject constructor(
         if (_ui.value !is ApplyUi.Working) _ui.value = ApplyUi.Idle
     }
 
-    private suspend fun <T> withSession(block: suspend (Applier) -> T): T? {
+    private suspend fun <T> withSession(block: suspend (ApplySession) -> T): T? {
         val session = sessions.open() ?: return null
         try {
-            return block(session.applier)
+            return block(session)
         } finally {
             withContext(NonCancellable) { runCatching { session.close() } }
         }
