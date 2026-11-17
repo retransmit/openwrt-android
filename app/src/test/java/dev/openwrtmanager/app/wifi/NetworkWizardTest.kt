@@ -96,6 +96,7 @@ class NetworkWizardTest {
         "set dhcp.guest.start='100'",
         "set dhcp.guest.limit='150'",
         "set dhcp.guest.leasetime='1h'",
+        "set dhcp.guest.dhcpv4='server'",
         "set firewall.guest=zone",
         "set firewall.guest.name='guest'",
         "add_list firewall.guest.network='guest'",

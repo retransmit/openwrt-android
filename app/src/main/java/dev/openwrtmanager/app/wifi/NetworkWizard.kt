@@ -84,6 +84,8 @@ object NetworkWizard {
         batch.set("dhcp", name, "start", "100")
         batch.set("dhcp", name, "limit", "150")
         batch.set("dhcp", name, "leasetime", if (input.kind == WizardKind.GUEST) "1h" else "12h")
+        // Newer OpenWrt (25.x and snapshots) treats a pool as off unless this is set; older releases ignore it.
+        batch.set("dhcp", name, "dhcpv4", "server")
 
         batch.section("firewall", name, "zone")
         batch.set("firewall", name, "name", name)
