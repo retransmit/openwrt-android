@@ -98,9 +98,9 @@ fun FirewallScreen(
                     if (state.view.forwards.isEmpty()) Text("No port forwards.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ForwardList(
                         state.view.forwards,
-                        onToggle = { review(viewModel.toggleForward(it)) },
+                        onToggle = { forward, on -> scope.launch { review(viewModel.setForwardEnabled(forward, on)) } },
                         onEdit = { editing = ForwardEdit(it) },
-                        onRemove = { review(viewModel.removeForward(it)) },
+                        onRemove = { scope.launch { review(viewModel.removeForward(it)) } },
                     )
                     OutlinedButton(onClick = { editing = ForwardEdit(null) }) {
                         Icon(Icons.Default.Add, contentDescription = null)
@@ -108,7 +108,11 @@ fun FirewallScreen(
                     }
 
                     Text("Traffic rules", style = MaterialTheme.typography.titleMedium)
-                    RuleList(state.view.rules, onToggle = { review(viewModel.toggleRule(it)) }, onRemove = { removingRule = it })
+                    RuleList(
+                        state.view.rules,
+                        onToggle = { rule, on -> scope.launch { review(viewModel.setRuleEnabled(rule, on)) } },
+                        onRemove = { removingRule = it },
+                    )
 
                     Text("Zones", style = MaterialTheme.typography.titleMedium)
                     state.view.zones.forEach { ZoneCard(it) }
@@ -159,7 +163,7 @@ fun FirewallScreen(
             confirmButton = {
                 TextButton(onClick = {
                     removingRule = null
-                    review(viewModel.removeRule(rule))
+                    scope.launch { review(viewModel.removeRule(rule)) }
                 }) { Text("Remove") }
             },
             dismissButton = { TextButton(onClick = { removingRule = null }) { Text("Cancel") } },
@@ -172,7 +176,7 @@ fun FirewallScreen(
 private class ForwardEdit(val existing: PortForward?)
 
 @Composable
-private fun ForwardList(forwards: List<PortForward>, onToggle: (PortForward) -> Unit, onEdit: (PortForward) -> Unit, onRemove: (PortForward) -> Unit) {
+private fun ForwardList(forwards: List<PortForward>, onToggle: (PortForward, Boolean) -> Unit, onEdit: (PortForward) -> Unit, onRemove: (PortForward) -> Unit) {
     if (forwards.isEmpty()) return
     ElevatedCard(Modifier.fillMaxWidth()) {
         forwards.forEachIndexed { index, forward ->
@@ -188,7 +192,7 @@ private fun ForwardList(forwards: List<PortForward>, onToggle: (PortForward) -> 
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Switch(checked = forward.enabled, onCheckedChange = { onToggle(forward) })
+                    Switch(checked = forward.enabled, onCheckedChange = { onToggle(forward, it) })
                 }
                 Row {
                     TextButton(onClick = { onEdit(forward) }) { Text("Edit") }
@@ -200,7 +204,7 @@ private fun ForwardList(forwards: List<PortForward>, onToggle: (PortForward) -> 
 }
 
 @Composable
-private fun RuleList(rules: List<TrafficRule>, onToggle: (TrafficRule) -> Unit, onRemove: (TrafficRule) -> Unit) {
+private fun RuleList(rules: List<TrafficRule>, onToggle: (TrafficRule, Boolean) -> Unit, onRemove: (TrafficRule) -> Unit) {
     if (rules.isEmpty()) {
         Text("No traffic rules.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
@@ -214,7 +218,7 @@ private fun RuleList(rules: List<TrafficRule>, onToggle: (TrafficRule) -> Unit, 
                     Text(rule.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextButton(onClick = { onRemove(rule) }) { Text("Remove") }
                 }
-                Switch(checked = rule.enabled, onCheckedChange = { onToggle(rule) })
+                Switch(checked = rule.enabled, onCheckedChange = { onToggle(rule, it) })
             }
         }
     }

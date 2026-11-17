@@ -32,9 +32,12 @@ object PortForwards {
     fun remove(existing: PortForward): ChangeSet =
         ChangeSet.of("Remove port forward", listOf("Remove the port forward ${existing.name}"), UciBatch().delete(F, existing.section))
 
+    /** Empty when it is already in that state, so a missing option is never deleted. */
     fun setEnabled(existing: PortForward, enabled: Boolean): ChangeSet {
         val batch = UciBatch()
-        if (enabled) batch.delete(F, existing.section, "enabled") else batch.set(F, existing.section, "enabled", "0")
+        if (enabled != existing.enabled) {
+            if (enabled) batch.delete(F, existing.section, "enabled") else batch.set(F, existing.section, "enabled", "0")
+        }
         val word = if (enabled) "Turn on" else "Turn off"
         return ChangeSet.of("$word port forward", listOf("$word the port forward ${existing.name}"), batch)
     }
@@ -71,7 +74,9 @@ object PortForwards {
         }
 
         val mac = input.target.mac
-        val reservation = reservationsOf(config.dhcp).firstOrNull { it.mac == mac }
+        // A host entry without a usable address (hostname only, or ip 'ignore') is no reservation;
+        // adding one for the same MAC is then refused, which surfaces as CANNOT_RESERVE.
+        val reservation = reservationsOf(config.dhcp).firstOrNull { it.mac == mac && it.ip?.let(::ipv4ToLong) != null }
         val ip = reservation?.ip ?: input.target.ip ?: return Planned.Problem(ForwardProblem.NO_TARGET_ADDRESS)
         val iface = interfaceHolding(ip, config.network) ?: return Planned.Problem(ForwardProblem.TARGET_OUTSIDE_LAN)
         if (config.network[iface]?.list("ipaddr").orEmpty().any { it.substringBefore('/') == ip }) return Planned.Problem(ForwardProblem.TARGET_OUTSIDE_LAN)

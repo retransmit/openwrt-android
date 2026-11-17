@@ -9,6 +9,7 @@ import dev.openwrtmanager.app.clients.ClientLink
 import dev.openwrtmanager.app.clients.ClientsGatewayProvider
 import dev.openwrtmanager.app.clients.DeviceConfig
 import dev.openwrtmanager.app.clients.Planned
+import dev.openwrtmanager.app.clients.ipv4ToLong
 import dev.openwrtmanager.app.clients.mergeClients
 import dev.openwrtmanager.app.firewall.FirewallView
 import dev.openwrtmanager.app.firewall.ForwardInput
@@ -59,10 +60,11 @@ class FirewallViewModel @Inject constructor(
             try {
                 val config = gateway.config()
                 val view = firewallViewOf(config.firewall)
-                val clients = mergeClients(gateway.readings(), config).filter { it.ip != null && it.link != ClientLink.OFFLINE }
+                val clients = targets(mergeClients(gateway.readings(), config), config)
                 val wanNetworks = view.zones.firstOrNull { it.name == view.wanZone }?.networks.orEmpty()
                 val wanAddress = gateway.interfaces().firstOrNull { it.name in wanNetworks && it.ipv4 != null }?.ipv4?.substringBefore('/')
-                _ui.value = FirewallUi.Ready(view, clients, privateWan = wanAddress != null && isPrivateIpv4(wanAddress))
+                val message = (_ui.value as? FirewallUi.Ready)?.message
+                _ui.value = FirewallUi.Ready(view, clients, privateWan = wanAddress != null && isPrivateIpv4(wanAddress), message = message)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -80,16 +82,65 @@ class FirewallViewModel @Inject constructor(
 
     suspend fun editForward(existing: PortForward, input: ForwardInput): ChangeSet? {
         val config = freshConfig() ?: return null
-        return outcome(PortForwards.edit(config, existing, input))
+        val current = currentForward(config, existing) ?: return null
+        return outcome(PortForwards.edit(config, current, input))
     }
 
-    fun removeForward(existing: PortForward): ChangeSet = PortForwards.remove(existing)
+    suspend fun removeForward(existing: PortForward): ChangeSet? {
+        val config = freshConfig() ?: return null
+        return currentForward(config, existing)?.let(PortForwards::remove)
+    }
 
-    fun toggleForward(existing: PortForward): ChangeSet = PortForwards.setEnabled(existing, !existing.enabled)
+    suspend fun setForwardEnabled(existing: PortForward, enabled: Boolean): ChangeSet? {
+        val config = freshConfig() ?: return null
+        val current = currentForward(config, existing) ?: return null
+        return PortForwards.setEnabled(current, enabled).takeIf { !it.isEmpty() } ?: alreadyThere(current.name, enabled)
+    }
 
-    fun toggleRule(rule: TrafficRule): ChangeSet = TrafficRules.setEnabled(rule, !rule.enabled)
+    suspend fun setRuleEnabled(rule: TrafficRule, enabled: Boolean): ChangeSet? {
+        val config = freshConfig() ?: return null
+        val current = currentRule(config, rule) ?: return null
+        return TrafficRules.setEnabled(current, enabled).takeIf { !it.isEmpty() } ?: alreadyThere(current.name, enabled)
+    }
 
-    fun removeRule(rule: TrafficRule): ChangeSet = TrafficRules.remove(listOf(rule))
+    suspend fun removeRule(rule: TrafficRule): ChangeSet? {
+        val config = freshConfig() ?: return null
+        return currentRule(config, rule)?.let { TrafficRules.remove(listOf(it)) }
+    }
+
+    /** The forward as it is on the router now; null, with a message and a refresh, when it is gone. */
+    private fun currentForward(config: DeviceConfig, shown: PortForward): PortForward? =
+        firewallViewOf(config.firewall).forwards.firstOrNull { it.section == shown.section } ?: gone(shown.name)
+
+    private fun currentRule(config: DeviceConfig, shown: TrafficRule): TrafficRule? =
+        firewallViewOf(config.firewall).rules.firstOrNull { it.section == shown.section } ?: gone(shown.name)
+
+    private fun <T> gone(name: String): T? {
+        say("$name no longer exists on the router. The list has been refreshed.")
+        load()
+        return null
+    }
+
+    private fun alreadyThere(name: String, enabled: Boolean): ChangeSet? {
+        say("$name is already ${if (enabled) "on" else "off"}.")
+        load()
+        return null
+    }
+
+    /**
+     * Devices a forward can point at: connected ones, and reserved ones even while they are off,
+     * each by its reserved address when it has one, since that is where the forward will point.
+     */
+    private fun targets(clients: List<dev.openwrtmanager.app.clients.Client>, config: DeviceConfig): List<dev.openwrtmanager.app.clients.Client> {
+        val reserved = dev.openwrtmanager.app.clients.reservationsOf(config.dhcp)
+            .filter { it.ip?.let(::ipv4ToLong) != null }
+            .associateBy { it.mac }
+        val online = clients.filter { it.link != ClientLink.OFFLINE }.map { c -> reserved[c.mac]?.let { c.copy(ip = it.ip) } ?: c }.filter { it.ip != null }
+        val offline = reserved.values.filter { r -> online.none { it.mac == r.mac } }.map { r ->
+            dev.openwrtmanager.app.clients.Client(r.mac, r.name, r.ip, ClientLink.OFFLINE, null, null, null, null, null, reserved = true, blocked = false)
+        }
+        return online + offline
+    }
 
     /** Changes are planned from the router's config as it is now, never from what the screen shows. */
     private suspend fun freshConfig(): DeviceConfig? = try {
