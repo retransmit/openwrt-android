@@ -49,6 +49,26 @@ class RouterClientTest {
     }
 
     @Test
+    fun interfaces_read_status_and_skip_loopback() = runTest {
+        fake.respond(
+            CMD_IFACES,
+            """{"interface":[
+                {"interface":"loopback","up":true,"proto":"static","l3_device":"lo","device":"lo","uptime":100,"ipv4-address":[{"address":"127.0.0.1","mask":8}]},
+                {"interface":"lan","up":true,"proto":"static","l3_device":"br-lan.1","device":"br-lan.1","uptime":7200,"ipv4-address":[{"address":"192.168.1.1","mask":24}]},
+                {"interface":"wan6","up":false,"proto":"dhcpv6","device":"wan"}
+            ]}""",
+        )
+        fake.respond("""ubus call network.device status '{"name":"br-lan.1"}'""", """{"statistics":{"rx_bytes":10,"tx_bytes":20}}""")
+        assertEquals(
+            listOf(
+                InterfaceStatus("lan", true, "static", "192.168.1.1/24", 7200, 10, 20),
+                InterfaceStatus("wan6", false, "dhcpv6", null, null, null, null),
+            ),
+            client.interfaces(),
+        )
+    }
+
+    @Test
     fun counters_quotes_device_name() = runTest {
         assertEquals(Counters(9876543210, 1234567890), client.counters("eth1"))
         assertTrue(fake.commands.last().endsWith("""'{"name":"eth1"}'"""))

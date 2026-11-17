@@ -19,6 +19,8 @@ interface ClientsGateway {
 
     /** The address this app's SSH connection comes from, as the router sees it. */
     suspend fun myAddress(): String?
+
+    suspend fun interfaces(): List<dev.openwrtmanager.app.router.InterfaceStatus>
 }
 
 fun interface ClientsGatewayProvider {
@@ -54,6 +56,8 @@ class SshClientsGateway(private val ssh: SshExecutor) : ClientsGateway {
     }
 
     override suspend fun ensureBlockFile(): Boolean = ssh.exec(BlockPlanner.ensureFileCommand()).exitCode == 0
+
+    override suspend fun interfaces(): List<dev.openwrtmanager.app.router.InterfaceStatus> = router.interfaces()
 
     override suspend fun myAddress(): String? =
         ssh.exec("echo \$SSH_CLIENT").stdout.trim().substringBefore(' ').takeIf { ipv4ToLong(it) != null }

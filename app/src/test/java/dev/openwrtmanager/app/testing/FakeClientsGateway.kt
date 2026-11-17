@@ -62,4 +62,11 @@ class FakeClientsGateway(
     }
 
     override suspend fun myAddress(): String? = address
+
+    var interfaces: List<dev.openwrtmanager.app.router.InterfaceStatus> = emptyList()
+
+    override suspend fun interfaces(): List<dev.openwrtmanager.app.router.InterfaceStatus> {
+        failure?.let { throw it }
+        return interfaces
+    }
 }
