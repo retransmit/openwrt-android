@@ -30,6 +30,15 @@ It talks to the router over SSH only. Nothing has to be installed on the router:
 - Guest devices reach the internet but not your home network or the router's settings.
 - IoT devices cannot start connections to your home network. Whether your own devices may reach them is your choice.
 - The address range is picked so it does not overlap anything already in use on the device.
+- On a router with a DSA switch, each network is its own VLAN on the LAN bridge (guest 10, IoT 20, others 30 and up), the way OpenWrt documents it. The first one turns VLAN filtering on with every port still on your home network.
+- An optional step puts the network on ports: a device port (untagged) for anything plugged into it, or an access point link (tagged).
+- After applying, the app checks that the new network is up and that DHCP is serving it.
+
+**VLANs**
+- The Network tab lists the VLANs on the LAN bridge with their address range and ports, and lets you set each port to none, device port or access point link.
+- Create a VLAN with its own address range and internet access, or one that only passes through to another device.
+- Changes that would leave your home network with no port and no Wi-Fi are refused. A device port whose VLAN goes away returns to your home network.
+- On an access point, "Add a network from my router" reads the router's guest and IoT networks and puts the same Wi-Fi names on the same VLANs, tagged on the uplink port. The router keeps doing DHCP and the firewall.
 
 ## Changing a router safely
 
@@ -111,12 +120,14 @@ Changes are built by pure functions from a snapshot of the current config, so th
 |---|---|---|
 | 1 | Device profiles, SSH, Home with live stats | Done |
 | 2 | Wi-Fi management, guest and IoT wizards, join codes, band steering, safe apply | Done |
-| 3 | VLAN wizard, including carrying guest networks to access points | Planned |
+| 3 | VLANs: guest and IoT as VLANs, port roles, carrying networks to access points, health check | Done |
 | 4 | Network, clients, firewall, packages, services, logs, system, a generic config editor and a terminal | Planned |
 
 Known limits right now:
 
-- Guest and IoT networks can only be created on a device that has its own internet link. On a plain access point the wizard explains this instead.
+- Guest and IoT networks are created on the device that has its own internet link. On a plain access point, "Add a network from my router" carries them there instead.
+- VLAN features need a DSA switch. Older swconfig devices keep the separate-bridge layout and the VLAN screens are hidden.
+- "Add a network from my router" has been tested in code but not yet on a real access point.
 - Each device is managed on its own. There is no "apply to all my access points" yet.
 - IPv6-only internet links are not detected as the uplink.
 - Firmware upgrades are out of scope.
