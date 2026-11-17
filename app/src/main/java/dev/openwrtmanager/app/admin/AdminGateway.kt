@@ -35,6 +35,9 @@ interface AdminGateway {
     suspend fun applyRestore(token: String): Boolean
 
     suspend fun discardRestore(token: String)
+
+    /** The device name inside an uploaded backup, to tell which device it came from. */
+    suspend fun restoreHostname(token: String): String?
 }
 
 fun interface AdminGatewayProvider {
@@ -66,6 +69,8 @@ class SshAdminGateway(
     override suspend fun discardRestore(token: String) {
         ssh.exec(discardRestoreCommand(token))
     }
+
+    override suspend fun restoreHostname(token: String): String? = parseBackupHostname(ssh.exec(restoreInfoCommand(token)).stdout)
 
     override suspend fun services(): List<Service> {
         val result = ssh.exec("ubus call rc list")

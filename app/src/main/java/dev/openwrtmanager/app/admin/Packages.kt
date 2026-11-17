@@ -16,6 +16,17 @@ private val PACKAGE_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._+-]*")
 
 fun isPackageName(name: String): Boolean = PACKAGE_NAME.matches(name)
 
+/**
+ * Removing these would cut the app off or break the device: SSH, the package manager itself, ucode
+ * (backups need it), the system's core and the firewall.
+ */
+private val ESSENTIAL = setOf(
+    "dropbear", "opkg", "ucode", "ucode-mod-fs", "busybox", "base-files", "rpcd", "ubus", "ubusd", "uci",
+    "procd", "netifd", "firewall4", "libc", "musl", "kernel",
+)
+
+fun removalAllowed(name: String): Boolean = name !in ESSENTIAL && !name.startsWith("apk-") && name != "apk"
+
 const val DETECT_TOOL_COMMAND = "command -v apk >/dev/null && echo apk || { command -v opkg >/dev/null && echo opkg; }"
 
 fun parseTool(output: String): PackageTool? = when (output.trim()) {
@@ -32,7 +43,8 @@ fun packageCommand(tool: PackageTool, action: PackageAction, name: String?): Str
         PackageTool.APK -> when (action) {
             PackageAction.LIST_INSTALLED -> "apk list --installed"
             PackageAction.UPDATE -> "apk update"
-            PackageAction.SEARCH -> "apk list --available ${shellQuote(name!!)}"
+            // apk matches its patterns with fnmatch: without the stars only the exact name is found.
+            PackageAction.SEARCH -> "apk list --available ${shellQuote("*$name*")}"
             PackageAction.INSTALL -> "apk add ${shellQuote(name!!)}"
             PackageAction.REMOVE -> "apk del ${shellQuote(name!!)}"
         }

@@ -83,7 +83,9 @@ class LiveRouterTest {
             assertTrue("a real archive", backup.size > 1_000 && dev.openwrtmanager.app.admin.isGzip(backup))
             val token = gateway.uploadRestore(backup)
             assertTrue("the router accepts its own backup", token != null)
-            gateway.discardRestore(token!!)
+            val ownName = dev.openwrtmanager.app.admin.systemConfigOf(gateway.systemConfig())?.hostname
+            assertEquals("the backup names this device", ownName, gateway.restoreHostname(token!!))
+            gateway.discardRestore(token)
             assertEquals("nothing left behind", "", ssh.exec("ls /tmp | grep -E 'owm-(backup|restore)' || true").stdout.trim())
             assertTrue("a broken archive is refused", gateway.uploadRestore(backup.copyOf(backup.size / 2)) == null)
             assertEquals("", ssh.exec("ls /tmp | grep -E 'owm-(backup|restore)' || true").stdout.trim())
