@@ -69,6 +69,30 @@ class LiveRouterTest {
     }
 
     /** Phase 2 reads: config snapshots, the Wi-Fi model, and what the guest wizard would do. Nothing is staged. */
+    /** Downloads a backup and uploads it back for checking, then discards it. Never restores. */
+    @Test
+    fun backup_round_trips_through_the_router_without_restoring() = runBlocking<Unit> {
+        val host = System.getenv("OWM_LIVE_HOSTS")?.split(',')?.firstOrNull()?.trim().orEmpty()
+        val keyPath = System.getenv("OWM_LIVE_KEY").orEmpty()
+        assumeTrue("live router test not configured", host.isNotEmpty() && keyPath.isNotEmpty())
+        val fingerprint = SshjExecutor.probeFingerprint(host, 22)
+        val ssh = SshjExecutor(SshTarget(host, 22, "root", AuthType.KEY, File(keyPath).readText(), fingerprint))
+        try {
+            val gateway = dev.openwrtmanager.app.admin.SshAdminGateway(ssh)
+            val backup = gateway.downloadBackup()!!
+            assertTrue("a real archive", backup.size > 1_000 && dev.openwrtmanager.app.admin.isGzip(backup))
+            val token = gateway.uploadRestore(backup)
+            assertTrue("the router accepts its own backup", token != null)
+            gateway.discardRestore(token!!)
+            assertEquals("nothing left behind", "", ssh.exec("ls /tmp | grep -E 'owm-(backup|restore)' || true").stdout.trim())
+            assertTrue("a broken archive is refused", gateway.uploadRestore(backup.copyOf(backup.size / 2)) == null)
+            assertEquals("", ssh.exec("ls /tmp | grep -E 'owm-(backup|restore)' || true").stdout.trim())
+            println("LIVE backup on $host: ${backup.size} bytes, round trip accepted, broken archive refused, nothing left in /tmp")
+        } finally {
+            ssh.close()
+        }
+    }
+
     @Test
     fun client_sources_read_on_real_routers() = runBlocking<Unit> {
         val hosts = System.getenv("OWM_LIVE_HOSTS")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()

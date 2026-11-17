@@ -24,6 +24,17 @@ interface AdminGateway {
 
     /** Runs a package command and returns what it printed. Null for a refused name. */
     suspend fun runPackage(tool: PackageTool, action: PackageAction, name: String?): CommandOutput?
+
+    /** The device's configuration as a sysupgrade archive; null when it could not be made. */
+    suspend fun downloadBackup(): ByteArray?
+
+    /** Uploads and checks an archive; returns the token to apply or discard it, or null when refused. */
+    suspend fun uploadRestore(bytes: ByteArray): String?
+
+    /** Restores the uploaded archive and reboots. Cannot be undone. */
+    suspend fun applyRestore(token: String): Boolean
+
+    suspend fun discardRestore(token: String)
 }
 
 fun interface AdminGatewayProvider {
@@ -31,7 +42,31 @@ fun interface AdminGatewayProvider {
     fun current(): AdminGateway?
 }
 
-class SshAdminGateway(private val ssh: SshExecutor) : AdminGateway {
+class SshAdminGateway(
+    private val ssh: SshExecutor,
+    private val tokens: () -> String = {
+        val bytes = ByteArray(6).also { java.security.SecureRandom().nextBytes(it) }
+        bytes.joinToString("") { "%02x".format(it) }
+    },
+) : AdminGateway {
+    override suspend fun downloadBackup(): ByteArray? {
+        val result = ssh.exec(backupCommand(tokens()), timeoutMs = 60_000)
+        return if (result.exitCode == 0) decodeBackup(result.stdout) else null
+    }
+
+    override suspend fun uploadRestore(bytes: ByteArray): String? {
+        if (bytes.size > MAX_BACKUP_BYTES || !isGzip(bytes)) return null
+        val token = tokens()
+        val result = ssh.exec(restoreUploadCommand(token), timeoutMs = 60_000, stdin = encodeBackup(bytes) + "\n")
+        return token.takeIf { result.exitCode == 0 && "OWM_RESTORE_OK" in result.stdout }
+    }
+
+    override suspend fun applyRestore(token: String): Boolean = ssh.exec(restoreApplyCommand(token), timeoutMs = 60_000).exitCode == 0
+
+    override suspend fun discardRestore(token: String) {
+        ssh.exec(discardRestoreCommand(token))
+    }
+
     override suspend fun services(): List<Service> {
         val result = ssh.exec("ubus call rc list")
         return if (result.exitCode == 0) parseServices(result.stdout) else throw IllegalStateException("rc list failed")
