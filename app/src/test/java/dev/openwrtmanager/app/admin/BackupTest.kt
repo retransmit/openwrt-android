@@ -87,6 +87,14 @@ class BackupTest {
     }
 
     @Test
+    fun the_backups_own_device_name_is_read_from_the_archive() {
+        assertTrue(restoreInfoCommand(token).contains("tar -xzOf /tmp/owm-restore-$token.tar.gz etc/config/system"))
+        assertEquals("OpenWrt", parseBackupHostname("config system\n\toption hostname 'OpenWrt'\n\toption timezone 'UTC'\n"))
+        assertEquals("home-router", parseBackupHostname("\toption hostname home-router\n"))
+        assertNull(parseBackupHostname(""))
+    }
+
+    @Test
     fun tokens_are_hex_only() {
         for (bad in listOf("", "0123", "0123456789aG", "../../etc/x1")) {
             assertThrows(bad, IllegalArgumentException::class.java) { backupCommand(bad) }

@@ -44,6 +44,14 @@ fun restoreApplyCommand(token: String): String {
 
 fun discardRestoreCommand(token: String): String = "rm -f ${restoreFile(token)}"
 
+/** Prints the uploaded backup's own system config, to tell which device it was taken from. */
+fun restoreInfoCommand(token: String): String = "tar -xzOf ${restoreFile(token)} etc/config/system 2>/dev/null"
+
+private val HOSTNAME_LINE = Regex("""^\s*option\s+hostname\s+'?([^'\s]+)'?\s*$""")
+
+fun parseBackupHostname(systemConfig: String): String? =
+    systemConfig.lines().firstNotNullOfOrNull { HOSTNAME_LINE.find(it)?.groupValues?.get(1) }
+
 fun encodeBackup(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)
 
 /** Null unless the text is base64 of a gzip archive. */

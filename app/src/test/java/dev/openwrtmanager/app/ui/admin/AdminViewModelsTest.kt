@@ -84,8 +84,14 @@ class FakeAdminGateway : AdminGateway {
         name: String?,
     ): dev.openwrtmanager.app.admin.CommandOutput? {
         packageRuns += action to name
+        packageFailure?.let { throw it }
         return packageOutputs[action] ?: dev.openwrtmanager.app.admin.CommandOutput(0, "")
     }
+
+    var packageFailure: Exception? = null
+    var restoreHostname: String? = "OpenWrt"
+
+    override suspend fun restoreHostname(token: String): String? = restoreHostname
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

@@ -2,6 +2,7 @@ package dev.openwrtmanager.app.admin
 
 import dev.openwrtmanager.app.testing.Fixtures
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -41,7 +42,7 @@ class PackagesTest {
     fun commands_follow_the_manager() {
         assertEquals("apk list --installed", packageCommand(PackageTool.APK, PackageAction.LIST_INSTALLED, null))
         assertEquals("apk update", packageCommand(PackageTool.APK, PackageAction.UPDATE, null))
-        assertEquals("apk list --available 'tcpdump'", packageCommand(PackageTool.APK, PackageAction.SEARCH, "tcpdump"))
+        assertEquals("apk list --available '*tcpdump*'", packageCommand(PackageTool.APK, PackageAction.SEARCH, "tcpdump"))
         assertEquals("apk add 'tcpdump'", packageCommand(PackageTool.APK, PackageAction.INSTALL, "tcpdump"))
         assertEquals("apk del 'tcpdump'", packageCommand(PackageTool.APK, PackageAction.REMOVE, "tcpdump"))
         assertEquals("opkg list-installed", packageCommand(PackageTool.OPKG, PackageAction.LIST_INSTALLED, null))
@@ -53,6 +54,15 @@ class PackagesTest {
         assertEquals(PackageTool.APK, parseTool("apk\n"))
         assertEquals(PackageTool.OPKG, parseTool("opkg"))
         assertNull(parseTool(""))
+    }
+
+    @Test
+    fun essentials_cannot_be_removed() {
+        for (name in listOf("dropbear", "apk-mbedtls", "apk-openssl", "opkg", "ucode", "ucode-mod-fs", "busybox", "base-files", "rpcd", "ubus", "uci", "procd", "netifd", "firewall4", "libc")) {
+            assertFalse(name, removalAllowed(name))
+        }
+        assertTrue(removalAllowed("tcpdump"))
+        assertTrue(removalAllowed("luci-app-firewall"))
     }
 
     @Test
