@@ -8,6 +8,8 @@ interface AdminGateway {
 
     /** True when the router accepted the action. */
     suspend fun runService(name: String, action: ServiceAction): Boolean
+
+    suspend fun log(kind: LogKind): List<String>
 }
 
 fun interface AdminGatewayProvider {
@@ -25,5 +27,11 @@ class SshAdminGateway(private val ssh: SshExecutor) : AdminGateway {
         if (!actionAllowed(name, action)) return false
         val command = serviceCommand(name, action) ?: return false
         return ssh.exec(command, timeoutMs = 30_000).exitCode == 0
+    }
+
+    override suspend fun log(kind: LogKind): List<String> {
+        val result = ssh.exec(logCommand(kind))
+        if (result.exitCode != 0) throw IllegalStateException("log read failed")
+        return result.stdout.lines().map { it.trimEnd() }.filter { it.isNotEmpty() }
     }
 }
