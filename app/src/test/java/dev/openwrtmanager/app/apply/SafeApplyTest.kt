@@ -18,17 +18,16 @@ import org.junit.Test
 class SafeApplyTest {
     private val ssh = FakeSshExecutor()
 
-    // Simulated router behaviour.
-    private var pending = ""
-    private var rejectStage = false
-    private var dropOnCommit = false
-    private var confirmFailures = 0
-    private var unreachableAfterCommit = false
-    private var routerReverted = false
-    private var changesThrows = false
+    /** What the simulated router answers to the apply script. Null means the link drops mid-command. */
+    private var applyResult: ExecResult? = ExecResult(0, "", "")
+    private var applyError: SshError = SshError.Disconnected()
+
+    /** Answers to successive resolve commands. An SshError entry means that attempt fails. The last entry repeats. */
+    private val resolveAnswers = mutableListOf<Any>("OWM_CONFIRMED")
 
     private var commitAt = -1L
-    private val confirmAttemptsAt = mutableListOf<Long>()
+    private val resolveAt = mutableListOf<Long>()
+    private val resolveCommands = mutableListOf<String>()
 
     private val change = ChangeSet(
         title = "Rename network",
@@ -36,29 +35,21 @@ class SafeApplyTest {
         batch = UciBatch().set("wireless", "default_radio0", "ssid", "Home 2").set("network", "lan", "ipaddr", "192.168.1.1"),
         mayDropConnection = true,
     )
-
-    private fun ok(stdout: String = "") = ExecResult(0, stdout, "")
+    private val quietChange = ChangeSet("Lease time", listOf("Change lease time"), UciBatch().set("dhcp", "lan", "leasetime", "6h"), false)
 
     private fun TestScope.safeApply(): SafeApply {
         ssh.handler = { cmd ->
             when {
-                cmd == "uci changes" -> if (changesThrows) throw SshError.Disconnected() else ok(pending)
-                cmd.startsWith("uci -q batch") -> if (rejectStage) ExecResult(1, "", "uci: Invalid argument") else ok()
-                cmd.startsWith("uci revert ") -> ok()
                 "setsid sh" in cmd -> {
                     commitAt = currentTime
-                    if (dropOnCommit) throw SshError.Disconnected()
-                    ok()
+                    applyResult ?: throw applyError
                 }
-                "echo OWM_CONFIRMED" in cmd -> {
-                    confirmAttemptsAt += currentTime - commitAt
-                    if (unreachableAfterCommit || confirmFailures-- > 0) throw SshError.Unreachable()
-                    ok("OWM_CONFIRMED\n")
-                }
-                "echo OWM_REVERTED" in cmd -> when {
-                    unreachableAfterCommit -> throw SshError.Unreachable()
-                    routerReverted -> ok("OWM_REVERTED\n")
-                    else -> ExecResult(1, "", "")
+                cmd.startsWith("d=/tmp/owm-apply-abcdef012345; [ -d") -> {
+                    resolveAt += currentTime - commitAt
+                    resolveCommands += cmd
+                    val answer = if (resolveAnswers.size > 1) resolveAnswers.removeAt(0) else resolveAnswers[0]
+                    if (answer is SshError) throw answer
+                    ExecResult(0, "$answer\n", "")
                 }
                 else -> null
             }
@@ -67,7 +58,7 @@ class SafeApplyTest {
     }
 
     @Test
-    fun happy_path_stages_arms_commits_and_confirms() = runTest {
+    fun happy_path_commits_on_a_fresh_connection_then_confirms_on_another_after_a_hold_off() = runTest {
         val phases = mutableListOf<ApplyPhase>()
         val outcome = safeApply().apply(change) { phases += it }
         assertEquals(ApplyOutcome.Applied, outcome)
@@ -75,156 +66,246 @@ class SafeApplyTest {
             listOf(ApplyPhase.Staging, ApplyPhase.Committing, ApplyPhase.Reconnecting, ApplyPhase.Confirming),
             phases,
         )
-        assertEquals(4, ssh.commands.size)
-        assertEquals("uci changes", ssh.commands[0])
-        assertEquals("uci -q batch <<'OWM_EOF'\n${change.batch.script()}\nOWM_EOF", ssh.commands[1])
-        assertEquals(ApplyScripts.armAndCommit(setOf("wireless", "network"), "abcdef012345", 45), ssh.commands[2])
-        assertEquals("touch /tmp/owm-apply-abcdef012345/confirmed && echo OWM_CONFIRMED", ssh.commands[3])
+        assertEquals(
+            listOf(
+                "<close>",
+                ApplyScripts.apply(change.batch.script().lines(), setOf("wireless", "network"), "abcdef012345", 90),
+                "<close>",
+                ApplyScripts.resolve("abcdef012345", confirm = true),
+            ),
+            ssh.events,
+        )
+        assertEquals("the change must have time to take effect before it is confirmed", listOf(8_000L), resolveAt)
     }
 
     @Test
-    fun foreign_changes_stop_everything() = runTest {
-        pending = "firewall.cfg1.name='x'\n"
-        val outcome = safeApply().apply(change)
-        assertEquals(ApplyOutcome.ForeignChanges("firewall.cfg1.name='x'"), outcome)
-        assertEquals(listOf("uci changes"), ssh.commands)
-    }
-
-    @Test
-    fun rejected_stage_is_reverted_and_never_committed() = runTest {
-        rejectStage = true
-        val outcome = safeApply().apply(change)
-        assertEquals(ApplyOutcome.Rejected("uci: Invalid argument"), outcome)
-        assertTrue("uci revert wireless" in ssh.commands)
-        assertTrue("uci revert network" in ssh.commands)
-        assertFalse(ssh.commands.any { "commit" in it })
+    fun a_change_that_cannot_cut_the_link_is_confirmed_sooner() = runTest {
+        assertEquals(ApplyOutcome.Applied, safeApply().apply(quietChange))
+        assertEquals(listOf(2_000L), resolveAt)
     }
 
     @Test
     fun empty_change_is_applied_without_touching_the_router() = runTest {
         val outcome = safeApply().apply(ChangeSet("Nothing", emptyList(), UciBatch(), mayDropConnection = false))
         assertEquals(ApplyOutcome.Applied, outcome)
-        assertTrue(ssh.commands.isEmpty())
+        assertTrue(ssh.events.isEmpty())
+    }
+
+    @Test
+    fun foreign_changes_stop_everything() = runTest {
+        applyResult = ExecResult(11, "firewall.cfg1.name='x'\n", "")
+        assertEquals(ApplyOutcome.ForeignChanges("firewall.cfg1.name='x'"), safeApply().apply(change))
+        assertTrue(resolveAt.isEmpty())
+    }
+
+    @Test
+    fun rejected_line_is_reported_and_nothing_is_confirmed() = runTest {
+        applyResult = ExecResult(12, "", "uci: Invalid argument\nset wireless.nosuch.ssid\n")
+        val outcome = safeApply().apply(change) as ApplyOutcome.Rejected
+        assertTrue(outcome.reason.contains("set wireless.nosuch.ssid"))
+        assertTrue(resolveAt.isEmpty())
+    }
+
+    @Test
+    fun failure_before_the_timer_is_armed_is_a_plain_rejection() = runTest {
+        for (code in listOf(10, 13)) {
+            resolveAt.clear()
+            applyResult = ExecResult(code, "", "")
+            assertTrue(safeApply().apply(change) is ApplyOutcome.Rejected)
+            assertTrue(resolveAt.isEmpty())
+        }
+    }
+
+    @Test
+    fun router_unreachable_from_the_start_is_a_rejection_not_a_long_wait() = runTest {
+        applyResult = null
+        applyError = SshError.Unreachable()
+        assertTrue(safeApply().apply(change) is ApplyOutcome.Rejected)
+        assertTrue(resolveAt.isEmpty())
+        assertTrue(currentTime < 5_000)
     }
 
     @Test
     fun dropped_link_during_commit_then_slow_reconnect_still_confirms() = runTest {
-        dropOnCommit = true
-        confirmFailures = 3
+        applyResult = null
+        resolveAnswers.clear()
+        resolveAnswers.addAll(listOf(SshError.Unreachable(), SshError.Unreachable(), SshError.Timeout(), "OWM_CONFIRMED"))
         assertEquals(ApplyOutcome.Applied, safeApply().apply(change))
-        assertEquals(listOf(0L, 2_000L, 4_000L, 6_000L), confirmAttemptsAt)
+        assertEquals(listOf(8_000L, 10_000L, 12_000L, 14_000L), resolveAt)
     }
 
     @Test
-    fun no_confirm_in_time_and_router_reverted_is_rolled_back() = runTest {
-        confirmFailures = Int.MAX_VALUE
-        routerReverted = true
+    fun the_router_is_the_judge_a_late_answer_of_reverted_is_never_reported_as_applied() = runTest {
+        resolveAnswers.clear()
+        resolveAnswers.addAll(listOf(SshError.Unreachable(), "OWM_REVERTED"))
         assertEquals(ApplyOutcome.RolledBack, safeApply().apply(change))
-        assertTrue("no confirm later than 40 s after commit", confirmAttemptsAt.all { it <= 40_000 })
-        assertTrue(confirmAttemptsAt.size >= 20)
     }
 
     @Test
-    fun router_never_reachable_again_is_unknown() = runTest {
-        unreachableAfterCommit = true
+    fun rollback_in_progress_keeps_polling_until_it_finishes() = runTest {
+        resolveAnswers.clear()
+        resolveAnswers.addAll(listOf("OWM_BUSY", "OWM_BUSY", "OWM_REVERTED"))
+        assertEquals(ApplyOutcome.RolledBack, safeApply().apply(change))
+        assertEquals(3, resolveAt.size)
+    }
+
+    @Test
+    fun failed_commit_is_never_confirmed_only_watched_until_the_router_undoes_it() = runTest {
+        applyResult = ExecResult(20, "", "uci: commit failed")
+        resolveAnswers.clear()
+        resolveAnswers.addAll(listOf("OWM_BUSY", "OWM_REVERTED"))
+        assertEquals(ApplyOutcome.RolledBack, safeApply().apply(change))
+        assertTrue(resolveCommands.all { it == ApplyScripts.resolve("abcdef012345", confirm = false) })
+        assertTrue(resolveCommands.none { "mkdir" in it })
+    }
+
+    @Test
+    fun router_never_reachable_again_is_unknown_after_waiting_out_the_timer() = runTest {
+        resolveAnswers.clear()
+        resolveAnswers += SshError.Unreachable()
         val outcome = safeApply().apply(change)
         assertTrue(outcome is ApplyOutcome.Unknown)
-        assertTrue("gives the router time to revert before giving up", currentTime - commitAt >= 45_000)
-        assertTrue("but does not wait forever", currentTime - commitAt <= 90_000)
+        assertTrue("waits past the 90 s timer", currentTime - commitAt >= 90_000)
+        assertTrue("but not forever", currentTime - commitAt <= 240_000)
     }
 
     @Test
-    fun reachable_but_neither_confirmed_nor_reverted_is_unknown() = runTest {
-        confirmFailures = Int.MAX_VALUE
-        routerReverted = false
+    fun missing_work_directory_is_unknown_not_a_guess() = runTest {
+        resolveAnswers.clear()
+        resolveAnswers += "OWM_ABSENT"
         assertTrue(safeApply().apply(change) is ApplyOutcome.Unknown)
     }
 
     @Test
-    fun preview_returns_staged_changes_then_unstages() = runTest {
+    fun preview_is_one_command_and_returns_the_staged_text() = runTest {
         val apply = safeApply()
-        var calls = 0
-        val base = ssh.handler!!
-        ssh.handler = { cmd ->
-            if (cmd == "uci changes") {
-                if (calls++ == 0) ok("") else ok("wireless.default_radio0.ssid='Home 2'\n")
-            } else {
-                base(cmd)
-            }
-        }
+        ssh.respond(ApplyScripts.preview(change.batch.script().lines(), setOf("wireless", "network")), "wireless.default_radio0.ssid='Home 2'\n")
         assertEquals("wireless.default_radio0.ssid='Home 2'", apply.preview(change))
-        assertEquals(listOf("uci revert wireless", "uci revert network"), ssh.commands.takeLast(2))
-        assertFalse(ssh.commands.any { "commit" in it })
+        assertEquals(1, ssh.commands.size)
     }
 
     @Test
-    fun preview_unstages_even_when_reading_changes_fails() = runTest {
+    fun preview_reports_foreign_changes_and_rejections() = runTest {
         val apply = safeApply()
-        var calls = 0
-        val base = ssh.handler!!
-        ssh.handler = { cmd ->
-            if (cmd == "uci changes" && calls++ > 0) throw SshError.Timeout() else base(cmd)
-        }
-        assertThrows(SshError.Timeout::class.java) { kotlinx.coroutines.runBlocking { apply.preview(change) } }
-        assertEquals(listOf("uci revert wireless", "uci revert network"), ssh.commands.takeLast(2))
-    }
-
-    @Test
-    fun preview_never_stages_on_top_of_foreign_changes() = runTest {
-        pending = "firewall.cfg1.name='x'\n"
-        val error = assertThrows(ForeignChangesException::class.java) {
-            kotlinx.coroutines.runBlocking { safeApply().preview(change) }
-        }
-        assertEquals("firewall.cfg1.name='x'", error.pending)
-        assertEquals(listOf("uci changes"), ssh.commands)
+        val command = ApplyScripts.preview(change.batch.script().lines(), setOf("wireless", "network"))
+        ssh.respond(command, "firewall.cfg1.name='x'\n", exitCode = 11)
+        val foreign = assertThrows(ForeignChangesException::class.java) { kotlinx.coroutines.runBlocking { apply.preview(change) } }
+        assertEquals("firewall.cfg1.name='x'", foreign.pending)
+        ssh.respond(command, "", exitCode = 12, stderr = "set wireless.nosuch.ssid")
+        assertThrows(IllegalStateException::class.java) { kotlinx.coroutines.runBlocking { apply.preview(change) } }
     }
 }
 
 class ApplyScriptsTest {
-    private val script = ApplyScripts.armAndCommit(setOf("wireless", "network"), "abcdef012345", 45)
+    private val lines = UciBatch()
+        .set("wireless", "default_radio0", "key", "s3cret pass")
+        .set("network", "lan", "ipaddr", "192.168.1.1")
+        .script().lines()
+    private val script = ApplyScripts.apply(lines, setOf("wireless", "network"), "abcdef012345", 90)
+    private val dir = "/tmp/owm-apply-abcdef012345"
+
+    private fun before(first: String, second: String) {
+        assertTrue("missing: $first", first in script)
+        assertTrue("missing: $second", second in script)
+        assertTrue("'$first' must come before '$second'", script.indexOf(first) < script.indexOf(second))
+    }
 
     @Test
-    fun timer_is_detached_with_setsid_before_any_commit() {
-        assertTrue("setsid sh" in script)
+    fun survives_the_ssh_session_ending_and_refuses_to_run_twice() {
+        assertTrue(script.startsWith("trap '' HUP\n"))
+        assertTrue("mkdir $dir 2>/dev/null || exit 10" in script)
+        assertFalse("a rerun must not reuse the directory", "mkdir -p $dir" in script)
+    }
+
+    @Test
+    fun order_is_checks_then_backup_then_stage_then_timer_then_commit() {
+        before("uci changes", "cp /etc/config/wireless $dir/wireless")
+        before("cp /etc/config/network $dir/network", "uci set wireless.default_radio0.key=")
+        before("uci set network.lan.ipaddr=", "setsid sh $dir/rollback.sh")
+        before("setsid sh $dir/rollback.sh", "touch $dir/armed")
+        before("touch $dir/armed", "uci commit wireless")
+        before("uci commit network", "reload_config || exit 20")
         assertFalse("nohup" in script)
-        assertTrue(script.indexOf("setsid sh") < script.indexOf("uci commit"))
-        assertTrue(script.indexOf("uci commit network") < script.lastIndexOf("reload_config"))
     }
 
     @Test
-    fun backups_are_taken_before_the_timer_starts() {
-        assertTrue(script.indexOf("cp /etc/config/wireless") < script.indexOf("setsid sh"))
-        assertTrue(script.indexOf("cp /etc/config/network") < script.indexOf("setsid sh"))
+    fun every_staged_line_is_its_own_checked_shell_command() {
+        assertTrue("uci set wireless.default_radio0.key='s3cret pass' || fail 'set wireless.default_radio0.key'" in script)
+        assertTrue("uci set network.lan.ipaddr='192.168.1.1' || fail 'set network.lan.ipaddr'" in script)
+        assertFalse("uci batch must not be used: it ignores rejected lines", "batch" in script)
     }
 
     @Test
-    fun rollback_restores_exactly_the_affected_configs() {
+    fun failure_labels_never_contain_values() {
+        val labels = Regex("fail '([^']*)'").findAll(script).map { it.groupValues[1] }.toList()
+        assertEquals(2, labels.size)
+        assertTrue(labels.none { "s3cret" in it })
+    }
+
+    @Test
+    fun rollback_takes_the_lock_restores_only_affected_configs_and_wipes_its_copies() {
         val rollback = script.substringAfter("<<'OWM_RB'\n").substringBefore("\nOWM_RB")
-        assertTrue(rollback.startsWith("sleep 45\n"))
-        assertTrue("[ -e /tmp/owm-apply-abcdef012345/confirmed ]" in rollback)
-        assertTrue("cp /tmp/owm-apply-abcdef012345/wireless /etc/config/wireless" in rollback)
-        assertTrue("cp /tmp/owm-apply-abcdef012345/network /etc/config/network" in rollback)
-        assertFalse("firewall" in rollback)
-        assertTrue(rollback.trimEnd().endsWith("touch /tmp/owm-apply-abcdef012345/reverted"))
-        assertTrue(rollback.indexOf("reload_config") < rollback.indexOf("reverted"))
+        val steps = rollback.lines()
+        assertEquals("sleep 90", steps[0])
+        assertEquals("mkdir $dir/lock 2>/dev/null || { rm -rf $dir; exit 0; }", steps[1])
+        assertTrue("cp $dir/wireless /etc/config/wireless" in steps)
+        assertTrue("cp $dir/network /etc/config/network" in steps)
+        assertFalse(rollback.contains("firewall"))
+        assertTrue(steps.indexOf("reload_config") > steps.indexOf("cp $dir/network /etc/config/network"))
+        assertTrue("copies hold Wi-Fi passwords", "rm -f $dir/wireless $dir/network" in steps)
+        assertEquals("touch $dir/reverted", steps.last())
+    }
+
+    @Test
+    fun resolve_lets_the_router_arbitrate_atomically() {
+        val confirm = ApplyScripts.resolve("abcdef012345", confirm = true)
+        assertTrue(confirm.startsWith("d=$dir; [ -d"))
+        assertTrue("mkdir \$d/lock 2>/dev/null" in confirm)
+        for (word in listOf("OWM_ABSENT", "OWM_NOT_ARMED", "OWM_CONFIRMED", "OWM_REVERTED", "OWM_BUSY")) assertTrue(word in confirm)
+        val watch = ApplyScripts.resolve("abcdef012345", confirm = false)
+        assertFalse("mkdir" in watch)
+        assertTrue("OWM_REVERTED" in watch)
     }
 
     @Test
     fun unsafe_names_are_refused() {
-        assertThrows(IllegalArgumentException::class.java) { ApplyScripts.armAndCommit(setOf("wire less"), "abcdef012345", 45) }
-        assertThrows(IllegalArgumentException::class.java) { ApplyScripts.armAndCommit(setOf("x;reboot"), "abcdef012345", 45) }
-        assertThrows(IllegalArgumentException::class.java) { ApplyScripts.armAndCommit(setOf("wireless"), "abc;def", 45) }
-        assertThrows(IllegalArgumentException::class.java) { ApplyScripts.armAndCommit(emptySet(), "abcdef012345", 45) }
+        assertThrows(IllegalArgumentException::class.java) { ApplyScripts.apply(lines, setOf("wire less"), "abcdef012345", 90) }
+        assertThrows(IllegalArgumentException::class.java) { ApplyScripts.apply(lines, setOf("x;reboot"), "abcdef012345", 90) }
+        assertThrows(IllegalArgumentException::class.java) { ApplyScripts.apply(lines, setOf("wireless"), "abc;def", 90) }
+        assertThrows(IllegalArgumentException::class.java) { ApplyScripts.apply(lines, emptySet(), "abcdef012345", 90) }
+        assertThrows(IllegalArgumentException::class.java) { ApplyScripts.apply(listOf("reboot"), setOf("wireless"), "abcdef012345", 90) }
     }
 
     @Test
     fun scratch_directory_mode_never_names_the_real_config() {
-        val scratch = ApplyScripts.armAndCommit(
-            setOf("owmtest"), "abcdef012345", 6,
+        val scratch = ApplyScripts.apply(
+            UciBatch().set("owmtest", "a", "value", "new").script().lines(), setOf("owmtest"), "abcdef012345", 6,
             configDir = "/tmp/owm-test-1/config", uci = "uci -c /tmp/owm-test-1/config -t /tmp/owm-test-1/save", reload = "true",
         )
         assertFalse("/etc/config" in scratch)
         assertFalse("reload_config" in scratch)
         assertTrue("uci -c /tmp/owm-test-1/config -t /tmp/owm-test-1/save commit owmtest" in scratch)
+        assertTrue("uci -c /tmp/owm-test-1/config -t /tmp/owm-test-1/save set owmtest.a.value='new' || fail" in scratch)
+    }
+
+    @Test
+    fun preview_stages_shows_and_always_unstages_in_one_script() {
+        val preview = ApplyScripts.preview(lines, setOf("wireless", "network"))
+        assertTrue(preview.startsWith("trap '' HUP\n"))
+        assertFalse("commit" in preview)
+        assertFalse("reload_config" in preview)
+        assertTrue(preview.endsWith("uci revert wireless; uci revert network\n# OWM_END"))
+        assertTrue(preview.indexOf("exit 11") < preview.indexOf("uci set"))
+    }
+
+    @Test
+    fun scripts_end_with_the_marker_and_the_runner_refuses_a_truncated_upload() {
+        assertTrue(script.endsWith("\n# OWM_END"))
+        val runner = ApplyScripts.runner("abcdef012345")
+        assertTrue("short enough for any ssh server's command line", runner.length < 400)
+        assertTrue("cat > /tmp/owm-run-abcdef012345.sh" in runner)
+        assertTrue("tail -n 1 /tmp/owm-run-abcdef012345.sh" in runner)
+        assertTrue(runner.indexOf("exit 14") < runner.indexOf("sh /tmp/owm-run-abcdef012345.sh;"))
+        assertThrows(IllegalArgumentException::class.java) { ApplyScripts.runner("x; reboot") }
     }
 }

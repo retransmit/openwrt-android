@@ -8,6 +8,7 @@ import dev.openwrtmanager.app.apply.ApplyOutcome
 import dev.openwrtmanager.app.apply.ApplyPhase
 import dev.openwrtmanager.app.apply.ChangeSet
 import dev.openwrtmanager.app.apply.ForeignChangesException
+import dev.openwrtmanager.app.apply.SafeApply
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -74,6 +75,8 @@ class ApplyViewModel @Inject constructor(
 
     fun confirm() {
         val review = _ui.value as? ApplyUi.Review ?: return
+        // The preview stages and un-stages on the router; applying must not overlap it.
+        if (review.loadingChanges) return
         _ui.value = ApplyUi.Working(ApplyPhase.Staging, ROLLBACK_SECONDS)
         viewModelScope.launch {
             // Counts down once and stops: there is nothing left to count after zero.
@@ -116,6 +119,6 @@ class ApplyViewModel @Inject constructor(
     }
 
     private companion object {
-        const val ROLLBACK_SECONDS = 45
+        const val ROLLBACK_SECONDS = SafeApply.DEFAULT_ROLLBACK_SECONDS
     }
 }

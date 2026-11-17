@@ -3,7 +3,6 @@ package dev.openwrtmanager.app.wifi
 import dev.openwrtmanager.app.apply.ChangeSet
 import dev.openwrtmanager.app.ssh.SshExecutor
 import dev.openwrtmanager.app.uci.UciBatch
-import java.security.MessageDigest
 
 data class SteeringRequest(val radios: Set<String>, val fastRoaming: Boolean)
 
@@ -43,15 +42,15 @@ object Steering {
 
         var assistChanged = false
         var fastChanged = false
-        val domain = mobilityDomain(group.ssid)
         fun assist(section: String, hasK: Boolean, hasV: Boolean, hasR: Boolean) {
             if (!hasK) { batch.set(W, section, "ieee80211k", "1"); assistChanged = true }
             if (!hasV) { batch.set(W, section, "bss_transition", "1"); assistChanged = true }
             if (request.fastRoaming && !hasR) {
                 batch.set(W, section, "ieee80211r", "1")
+                // Only 802.11r itself and over-the-air handover are set. OpenWrt chooses the key
+                // derivation that fits the security mode and derives the mobility domain from the
+                // network name, so every radio agrees without the app forcing either.
                 batch.set(W, section, "ft_over_ds", "0")
-                batch.set(W, section, "ft_psk_generate_local", "1")
-                batch.set(W, section, "mobility_domain", domain)
                 fastChanged = true
             }
         }
@@ -81,10 +80,6 @@ object Steering {
         return ChangeSet.of("Band steering for $name", summary, batch)
     }
 
-    /** Four hex digits derived from the network name, so every radio of one network agrees without coordination. */
-    fun mobilityDomain(ssid: String): String =
-        MessageDigest.getInstance("SHA-256").digest(ssid.toByteArray(Charsets.UTF_8))
-            .take(2).joinToString("") { "%02x".format(it) }
 }
 
 data class UsteerStatus(val installed: Boolean, val running: Boolean)

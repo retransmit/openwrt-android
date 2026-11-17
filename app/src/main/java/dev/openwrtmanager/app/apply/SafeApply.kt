@@ -5,100 +5,108 @@ import dev.openwrtmanager.app.ssh.ExecResult
 import dev.openwrtmanager.app.ssh.SshError
 import dev.openwrtmanager.app.ssh.SshExecutor
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import java.security.SecureRandom
 
 /**
  * The only code that commits config on a router.
  *
- * It refuses to run on top of someone else's uncommitted changes, stages the batch, and then in one
- * command arms a rollback timer on the router and commits. If the app cannot reach the router again
- * to confirm, the router restores the previous config by itself.
+ * The whole change runs as one script on the router (see [ApplyScripts.apply]), which arms a timer
+ * that restores the previous config. The app then waits for the change to take effect, opens a
+ * NEW connection, and asks the router to keep it. Being able to do that is the proof that the
+ * change did not cut the phone off. The router decides atomically between "kept" and "undone",
+ * so the answer shown to the user is what actually happened, even if it arrives late.
  */
 class SafeApply(
     private val ssh: SshExecutor,
     private val time: TimeSource,
     private val configDir: String = "/etc/config",
-    private val rollbackSeconds: Int = 45,
+    private val rollbackSeconds: Int = DEFAULT_ROLLBACK_SECONDS,
     private val uci: String = "uci",
     private val reload: String = "reload_config",
+    /** Wait after committing before the first confirm. Null picks by how disruptive the change is. */
+    private val holdOffMs: Long? = null,
     private val tokenSource: () -> String = ::randomToken,
 ) : Applier {
 
     override suspend fun preview(change: ChangeSet): String {
         if (change.isEmpty()) return ""
-        val pending = changes()
-        if (pending.isNotEmpty()) throw ForeignChangesException(pending)
-        try {
-            val staged = ssh.exec(ApplyScripts.stage(change.batch.script(), uci))
-            if (staged.exitCode != 0) throw IllegalStateException(staged.stderr.trim().ifEmpty { "the router refused the change" })
-            return changes()
-        } finally {
-            revert(change)
+        val script = ApplyScripts.preview(change.batch.script().lines(), change.batch.configs, uci)
+        val result = ssh.exec(ApplyScripts.runner(tokenSource()), timeoutMs = 30_000, stdin = script)
+        return when (result.exitCode) {
+            0 -> result.stdout.trim()
+            ApplyScripts.EXIT_FOREIGN -> throw ForeignChangesException(result.stdout.trim())
+            else -> throw IllegalStateException(result.stderr.trim().ifEmpty { "the router refused the change" })
         }
     }
 
     override suspend fun apply(change: ChangeSet, onPhase: (ApplyPhase) -> Unit): ApplyOutcome {
         if (change.isEmpty()) return ApplyOutcome.Applied
-        val configs = change.batch.configs
+        val token = tokenSource()
+        val script = ApplyScripts.apply(change.batch.script().lines(), change.batch.configs, token, rollbackSeconds, configDir, uci, reload)
 
         onPhase(ApplyPhase.Staging)
-        try {
-            val pending = changes()
-            if (pending.isNotEmpty()) return ApplyOutcome.ForeignChanges(pending)
-        } catch (e: SshError) {
-            return ApplyOutcome.Rejected("Lost the connection before anything was changed")
-        }
-        try {
-            val staged = ssh.exec(ApplyScripts.stage(change.batch.script(), uci))
-            if (staged.exitCode != 0) {
-                revert(change)
-                return ApplyOutcome.Rejected(staged.stderr.trim().ifEmpty { "The router refused the change" })
-            }
-        } catch (e: SshError) {
-            runCatchingSsh { revert(change) }
-            return ApplyOutcome.Rejected("Lost the connection before anything was changed")
-        }
-
+        // Start from a fresh connection: the executor only retries a command on a connection that was
+        // already open, and this command must never be sent twice.
+        ssh.close()
         onPhase(ApplyPhase.Committing)
-        val token = tokenSource()
         val commitAt = time.nowMillis()
-        val committed: ExecResult? = try {
-            ssh.exec(ApplyScripts.armAndCommit(configs, token, rollbackSeconds, configDir, uci, reload))
+        val result: ExecResult? = try {
+            ssh.exec(ApplyScripts.runner(token), timeoutMs = 30_000, stdin = script)
+        } catch (e: SshError.Unreachable) {
+            return ApplyOutcome.Rejected("Could not reach the router. Nothing was changed.")
+        } catch (e: SshError.AuthFailed) {
+            return ApplyOutcome.Rejected("The router refused the login. Nothing was changed.")
         } catch (e: SshError) {
-            // Expected when the reload cuts the link mid-command. The timer decides from here.
+            // The link dropped while the script was running, which a network reload can cause.
+            // The script carries on by itself; the router will tell us how it ended.
             null
         }
-        val commitFailed = committed != null && committed.exitCode != 0
-        if (commitFailed) runCatchingSsh { revert(change) }
+        when (result?.exitCode) {
+            // Committed, or the commit failed after the timer was armed, or the channel closed without
+            // a status (treated like a dropped link): the router will say how it ended.
+            null, 0, ApplyScripts.EXIT_COMMIT, -1 -> Unit
+            ApplyScripts.EXIT_FOREIGN -> return ApplyOutcome.ForeignChanges(result.stdout.trim())
+            ApplyScripts.EXIT_REFUSED -> return ApplyOutcome.Rejected(
+                "The router refused part of the change: " + result.stderr.trim().lines().last(),
+            )
+            ApplyScripts.EXIT_PREPARE -> return ApplyOutcome.Rejected("The router could not prepare the change. Its temporary storage may be full.")
+            ApplyScripts.EXIT_UPLOAD -> return ApplyOutcome.Rejected("The connection was interrupted while sending the change. Nothing was changed.")
+            ApplyScripts.EXIT_BUSY -> return ApplyOutcome.Rejected(
+                "Another change on this router is still waiting to be confirmed. Try again in a couple of minutes.",
+            )
+            // Any other status means the script stopped before the timer was armed, so nothing was committed.
+            else -> return ApplyOutcome.Rejected(
+                "The router could not run the change: " + result.stderr.trim().lines().last().ifEmpty { "exit ${result.exitCode}" },
+            )
+        }
+        // A commit that failed after the timer was armed must not be kept: only watch it being undone.
+        val mayConfirm = result?.exitCode != ApplyScripts.EXIT_COMMIT
 
+        onPhase(ApplyPhase.Reconnecting)
+        // Give the reload time to take effect, then drop the old connection. Confirming over the
+        // connection that was open before the change would prove nothing.
+        delay(holdOffMs ?: if (change.mayDropConnection) DISRUPTIVE_HOLD_OFF_MS else QUIET_HOLD_OFF_MS)
+        ssh.close()
+
+        val giveUpAt = commitAt + rollbackSeconds * 1_000L + GIVE_UP_AFTER_TIMER_MS
         var lastError: Throwable = IllegalStateException("The change was neither confirmed nor undone")
-        if (!commitFailed) {
-            onPhase(ApplyPhase.Reconnecting)
-            val confirmUntil = commitAt + (rollbackSeconds - CONFIRM_MARGIN_SECONDS) * 1_000L
-            while (true) {
-                try {
-                    if ("OWM_CONFIRMED" in ssh.exec(ApplyScripts.confirm(token)).stdout) {
+        while (true) {
+            try {
+                val answer = withTimeoutOrNull(ATTEMPT_MS) {
+                    ssh.exec(ApplyScripts.resolve(token, mayConfirm), timeoutMs = 8_000).stdout
+                }
+                when {
+                    answer == null -> lastError = SshError.Timeout()
+                    "OWM_CONFIRMED" in answer -> {
                         onPhase(ApplyPhase.Confirming)
                         return ApplyOutcome.Applied
                     }
-                } catch (e: SshError) {
-                    lastError = e
+                    "OWM_REVERTED" in answer -> return ApplyOutcome.RolledBack
+                    // Gone without a verdict: for example the router rebooted. Do not guess.
+                    "OWM_ABSENT" in answer -> return ApplyOutcome.Unknown(IllegalStateException("The router has no record of this change"))
+                    // OWM_BUSY (being undone right now) or OWM_NOT_ARMED: ask again.
                 }
-                if (time.nowMillis() + RETRY_MS > confirmUntil) break
-                delay(RETRY_MS)
-            }
-        }
-
-        // Not confirmed. Wait for the router's timer to fire, then find out what it did.
-        val timerAt = commitAt + rollbackSeconds * 1_000L
-        val settleBy = timerAt + SETTLE_MS
-        val giveUpAt = timerAt + GIVE_UP_MS
-        (timerAt + RETRY_MS - time.nowMillis()).let { if (it > 0) delay(it) }
-        while (true) {
-            try {
-                if ("OWM_REVERTED" in ssh.exec(ApplyScripts.checkReverted(token)).stdout) return ApplyOutcome.RolledBack
-                // Reachable but not reverted yet: allow the reload a moment to finish, then stop asking.
-                if (time.nowMillis() >= settleBy) break
             } catch (e: SshError) {
                 lastError = e
             }
@@ -108,31 +116,18 @@ class SafeApply(
         return ApplyOutcome.Unknown(lastError)
     }
 
-    private suspend fun changes(): String {
-        val result = ssh.exec("$uci changes")
-        if (result.exitCode != 0) throw IllegalStateException(result.stderr.trim().ifEmpty { "could not read pending changes" })
-        return result.stdout.trim()
-    }
+    companion object {
+        const val DEFAULT_ROLLBACK_SECONDS = 90
 
-    private suspend fun revert(change: ChangeSet) {
-        for (config in change.batch.configs) ssh.exec("$uci revert $config")
-    }
+        private const val RETRY_MS = 2_000L
+        private const val ATTEMPT_MS = 15_000L
+        private const val DISRUPTIVE_HOLD_OFF_MS = 8_000L
+        private const val QUIET_HOLD_OFF_MS = 2_000L
 
-    private suspend fun runCatchingSsh(block: suspend () -> Unit) {
-        try {
-            block()
-        } catch (e: SshError) {
-            // Best effort while the link is down.
-        }
-    }
+        /** After its timer fires the router needs to reload, and the phone may need to rejoin Wi-Fi. */
+        private const val GIVE_UP_AFTER_TIMER_MS = 120_000L
 
-    private companion object {
-        const val RETRY_MS = 2_000L
-        const val CONFIRM_MARGIN_SECONDS = 5
-        const val SETTLE_MS = 15_000L
-        const val GIVE_UP_MS = 30_000L
-
-        fun randomToken(): String {
+        private fun randomToken(): String {
             val bytes = ByteArray(6).also { SecureRandom().nextBytes(it) }
             return bytes.joinToString("") { "%02x".format(it) }
         }

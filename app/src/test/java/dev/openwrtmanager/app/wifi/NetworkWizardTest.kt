@@ -155,7 +155,7 @@ class NetworkWizardTest {
                 "Create Wi-Fi network \"Home-Guest\" on 2.4 GHz and 5 GHz",
                 "Give it its own address range, 192.168.10.0/24",
                 "Devices on it can reach the internet, but not your home network or this router's settings",
-                "Devices on it cannot see each other",
+                "Devices on the same band cannot see each other",
             ),
             summary,
         )
@@ -317,5 +317,60 @@ class NetworkWizardTest {
         val script = NetworkWizard.remove(odd, "guest").batch.script()
         assertFalse("br_guest" in script)
         assertFalse(router.network.ofType("device").first().name in script)
+    }
+
+    @Test
+    fun isolation_claim_matches_what_one_radio_can_promise() {
+        assertTrue("Devices on it cannot see each other" in ready(router, iot).change.summary)
+        assertTrue("Devices on the same band cannot see each other" in ready(router, guest).change.summary)
+    }
+
+    /** A hand-made network that shares the lan zone: list network 'lan' 'office'. */
+    private fun withOfficeInLanZone(): DeviceSnapshot {
+        val office = UciSection("office", "interface", false, 60, mapOf("proto" to "static", "device" to "br-office"), emptyMap())
+        val bridge = UciSection("br_office", "device", false, 61, mapOf("type" to "bridge", "name" to "br-office"), emptyMap())
+        val iface = UciSection(
+            "office_radio0", "wifi-iface", false, 60,
+            mapOf("device" to "radio0", "mode" to "ap", "network" to "office", "ssid" to "Office"), emptyMap(),
+        )
+        return router.copy(
+            network = router.network.copy(sections = router.network.sections + office + bridge),
+            wireless = router.wireless.copy(sections = router.wireless.sections + iface),
+            firewall = router.firewall.copy(
+                sections = router.firewall.sections.map {
+                    if (it.type == "zone" && it.opt("name") == "lan") it.copy(lists = it.lists + ("network" to listOf("lan", "office"))) else it
+                },
+            ),
+        )
+    }
+
+    @Test
+    fun removing_a_network_never_deletes_a_zone_it_shares() {
+        val snapshot = withOfficeInLanZone()
+        val lanZone = snapshot.firewall.ofType("zone").first { it.opt("name") == "lan" }
+        val lanToWan = snapshot.firewall.ofType("forwarding").first { it.opt("src") == "lan" }
+        val lines = NetworkWizard.remove(snapshot, "office").batch.script().lines()
+        assertTrue("del_list firewall.${lanZone.name}.network='office'" in lines)
+        assertFalse("delete firewall.${lanZone.name}" in lines)
+        assertFalse("delete firewall.${lanToWan.name}" in lines)
+        assertTrue("delete network.office" in lines)
+        assertTrue("delete wireless.office_radio0" in lines)
+    }
+
+    @Test
+    fun configured_addresses_count_as_used_even_when_the_interface_is_down() {
+        fun s(name: String, type: String, o: Map<String, String>, l: Map<String, List<String>> = emptyMap()) = UciSection(name, type, false, 70, o, l)
+        val network = router.network.copy(
+            sections = router.network.sections +
+                s("vpn", "interface", mapOf("proto" to "static", "ipaddr" to "192.168.10.1", "netmask" to "255.255.255.0")) +
+                s("lab", "interface", mapOf("proto" to "static"), mapOf("ipaddr" to listOf("192.168.11.1/24"))) +
+                s("r1", "route", mapOf("interface" to "wan", "target" to "192.168.12.0", "netmask" to "255.255.255.0")) +
+                s("r2", "route", mapOf("interface" to "wan", "target" to "192.168.13.0/24")),
+        )
+        val configured = configuredSubnets(network)
+        for (expected in listOf("192.168.10.0/24", "192.168.11.0/24", "192.168.12.0/24", "192.168.13.0/24")) {
+            assertTrue(expected, expected in configured)
+        }
+        assertEquals("192.168.14.0/24", pickSubnet(configured))
     }
 }

@@ -58,6 +58,7 @@ import dev.openwrtmanager.app.wifi.label
 internal fun SsidError.text(): String = when (this) {
     SsidError.EMPTY -> "Enter a network name"
     SsidError.TOO_LONG -> "Too long: a name can use at most 32 bytes"
+    SsidError.INVALID_CHARACTER -> "Remove line breaks and other invisible characters"
 }
 
 internal fun KeyError.text(): String = when (this) {
@@ -104,6 +105,13 @@ fun NetworkEditScreen(
                 form.failed -> Notice(Icons.Default.WifiOff, "Could not load this network", "Go back and try again.")
                 !form.loaded -> LinearProgressIndicator(Modifier.fillMaxWidth())
                 else -> {
+                    if (form.readOnly) {
+                        Text(
+                            "This network uses a security mode the app cannot edit. You can look at it and remove it, but not change it here.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     OutlinedTextField(
                         value = form.ssid,
                         onValueChange = viewModel::onSsid,

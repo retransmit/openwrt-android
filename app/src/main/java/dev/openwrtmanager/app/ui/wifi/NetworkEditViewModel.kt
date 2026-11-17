@@ -49,6 +49,8 @@ data class NetworkForm(
     val fastRoaming: Boolean = false,
     val usteer: UsteerStatus? = null,
     val usteerBusy: Boolean = false,
+    /** The network uses a security mode the app does not offer (enterprise, OWE, WEP): shown, never rewritten. */
+    val readOnly: Boolean = false,
 ) {
     /** The password is part of the form but must never be printed. */
     override fun toString(): String = "NetworkForm(ssid=$ssid, security=$security, radios=$radios, loaded=$loaded)"
@@ -111,6 +113,7 @@ class NetworkEditViewModel @Inject constructor(
                     steeringAssist = found?.steeringAssist ?: false,
                     fastRoaming = found?.fastRoaming ?: false,
                     usteer = usteer,
+                    readOnly = found != null && found.first.security == null,
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -130,7 +133,7 @@ class NetworkEditViewModel @Inject constructor(
 
     private fun edit(change: NetworkForm.() -> NetworkForm) = _form.update {
         val next = it.change()
-        next.copy(canSave = next.loaded && next.toEdit() != initial)
+        next.copy(canSave = next.loaded && !next.readOnly && next.toEdit() != initial)
     }
 
     private fun NetworkForm.toEdit() = NetworkEdit(ssid, security, key, hidden, isolate, enabled, radios)
@@ -155,6 +158,7 @@ class NetworkEditViewModel @Inject constructor(
 
     /** Band steering is its own change, separate from Save. Null for a network that does not exist yet. */
     fun steeringChange(enable: Boolean, fastRoaming: Boolean): ChangeSet? {
+        if (_form.value.readOnly) return null
         val wifi = config ?: return null
         val existing = group ?: return null
         return try {
@@ -177,9 +181,10 @@ class NetworkEditViewModel @Inject constructor(
         val snap = snapshot ?: return null
         val existing = group ?: return null
         val network = existing.first.network
-        val ownsNetwork = network != null && network !in BUILT_IN && snap.network[network] != null &&
+        // Only networks with the names the wizard gives out are torn down as a whole.
+        val ownsNetwork = network != null && WIZARD_NAME.matches(network) && snap.network[network] != null &&
             wifi.ifaces.filter { it.network == network }.all { it in existing.ifaces }
-        return if (ownsNetwork) NetworkWizard.remove(snap, network!!) else WifiEdits.deleteGroup(wifi, existing)
+        return if (ownsNetwork) NetworkWizard.remove(snap, network) else WifiEdits.deleteGroup(wifi, existing)
     }
 
     fun startUsteer() = usteerAction { it.startUsteer() }
@@ -206,6 +211,6 @@ class NetworkEditViewModel @Inject constructor(
 
     private companion object {
         const val HOME_NETWORK = "lan"
-        val BUILT_IN = setOf("lan", "wan", "wan6", "loopback")
+        val WIZARD_NAME = Regex("(guest|iot)[0-9]*")
     }
 }

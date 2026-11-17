@@ -35,4 +35,19 @@ class ApplyMessagesTest {
         assertTrue(shown.contains("wireless.guest_radio0.ssid='Home-Guest'"))
         assertTrue(shown.contains("wireless.guest_radio0.key='(hidden)'"))
     }
+
+    @Test
+    fun other_kinds_of_secret_are_hidden_too() {
+        val raw = listOf(
+            "network.wg0.private_key='AAAA'",
+            "network.peer.preshared_key='BBBB'",
+            "wireless.x.auth_secret='CCCC'",
+            "wireless.x.key1='DDDD'",
+            "system.x.password='EEEE'",
+            "network.lan.ipaddr='192.168.1.1'",
+        ).joinToString("\n")
+        val shown = maskSecrets(raw)
+        for (secret in listOf("AAAA", "BBBB", "CCCC", "DDDD", "EEEE")) assertFalse(secret, shown.contains(secret))
+        assertTrue(shown.contains("network.lan.ipaddr='192.168.1.1'"))
+    }
 }

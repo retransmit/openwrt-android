@@ -177,3 +177,13 @@ class WifiEditsTest {
         assertEquals(listOf("Turn off the 2.4 GHz radio"), change.summary)
     }
 }
+
+class WifiValidationControlCharsTest {
+    @Test
+    fun control_characters_are_rejected_before_they_reach_the_router() {
+        assertEquals(SsidError.INVALID_CHARACTER, validateSsid("Home\nNet"))
+        assertEquals(SsidError.INVALID_CHARACTER, validateSsid("Home\u0000"))
+        assertEquals(SsidError.INVALID_CHARACTER, validateSsid("Tab\there"))
+        assertNull(validateSsid("Plain name"))
+    }
+}

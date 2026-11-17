@@ -43,3 +43,26 @@ fun pickSubnet(used: List<String>): String? {
     }
     return null
 }
+
+private fun maskBits(netmask: String): Int? {
+    val value = parseIpv4(netmask) ?: return null
+    val bits = java.lang.Long.bitCount(value)
+    // A valid mask is a run of ones followed by zeros.
+    return bits.takeIf { value == (0xFFFFFFFFL shl (32 - bits) and 0xFFFFFFFFL) }
+}
+
+/**
+ * Address ranges written in the network config: interface addresses and static routes. These count
+ * as used even when the interface is down right now, such as a VPN that is not connected.
+ */
+fun configuredSubnets(network: dev.openwrtmanager.app.uci.UciConfig): List<String> {
+    val found = mutableListOf<String>()
+    fun add(address: String, netmask: String?) {
+        val host = address.substringBefore('/')
+        val bits = if ('/' in address) address.substringAfter('/').toIntOrNull() else netmask?.let(::maskBits)
+        networkOf(host, bits ?: 32)?.let { found += it }
+    }
+    for (iface in network.ofType("interface")) iface.list("ipaddr").forEach { add(it, iface.opt("netmask")) }
+    for (route in network.ofType("route")) route.opt("target")?.let { add(it, route.opt("netmask")) }
+    return found.distinct()
+}

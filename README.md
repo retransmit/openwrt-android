@@ -37,7 +37,7 @@ Every change to router config goes through the same path:
 
 1. You see what will change in plain words, and can expand the exact `uci` changes (passwords hidden).
 2. The app refuses to continue if another tool, such as LuCI, has unsaved changes on the router.
-3. The router starts a 45 second undo timer, then saves and applies the change.
+3. The router starts a 90 second undo timer, then saves and applies the change.
 4. The app reconnects and confirms. If it cannot reach the router in time, the router restores the previous config by itself.
 
 The result screen always says what actually happened: applied, undone, refused, or could not be confirmed.

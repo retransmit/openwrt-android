@@ -48,20 +48,17 @@ class SteeringTest {
     }
 
     @Test
-    fun fast_roaming_adds_its_options_with_a_stable_mobility_domain() {
-        val request = allRadios.copy(fastRoaming = true)
-        val script = Steering.enable(both, both.groups.single(), request).batch.script()
-        val domain = Regex("mobility_domain='([0-9a-f]{4})'").findAll(script).map { it.groupValues[1] }.toSet()
-        assertEquals("one domain shared by both radios", 1, domain.size)
+    fun fast_roaming_turns_on_802_11r_and_leaves_key_handling_to_openwrt() {
+        val script = Steering.enable(both, both.groups.single(), allRadios.copy(fastRoaming = true)).batch.script()
         for (section in listOf("default_radio0", "default_radio1")) {
             assertTrue("set wireless.$section.ieee80211r='1'" in script)
             assertTrue("set wireless.$section.ft_over_ds='0'" in script)
-            assertTrue("set wireless.$section.ft_psk_generate_local='1'" in script)
         }
-        assertEquals(script, Steering.enable(both, both.groups.single(), request).batch.script())
-        assertEquals(domain.single(), Steering.mobilityDomain("Home"))
-        assertFalse(Steering.mobilityDomain("Home") == Steering.mobilityDomain("Other"))
+        // OpenWrt picks the right key derivation per security mode and derives the domain from the name.
+        assertFalse("ft_psk_generate_local" in script)
+        assertFalse("mobility_domain" in script)
     }
+
 
     @Test
     fun fast_roaming_is_refused_on_open_networks() {

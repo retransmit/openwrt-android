@@ -9,7 +9,7 @@ fun outcomeMessage(outcome: ApplyOutcome): OutcomeMessage = when (outcome) {
     ApplyOutcome.Applied -> OutcomeMessage("Applied", "The change is saved and active on the router.")
     ApplyOutcome.RolledBack -> OutcomeMessage(
         "Change undone",
-        "The app could not reach the router again in time, so the router undid the change by itself. Nothing was lost.",
+        "The change was not confirmed, so the router restored its previous settings by itself. Nothing was lost.",
     )
     is ApplyOutcome.Rejected -> OutcomeMessage("Not applied", "The router refused the change. Nothing was changed.", outcome.reason)
     is ApplyOutcome.ForeignChanges -> OutcomeMessage(
@@ -24,7 +24,7 @@ fun outcomeMessage(outcome: ApplyOutcome): OutcomeMessage = when (outcome) {
     )
 }
 
-private val SECRET_LINE = Regex("""(\.(?:key|sae_password|password|wpa_psk)=)(.*)""")
+private val SECRET_LINE = Regex("""(\.[A-Za-z0-9_]*(?:key|pass|secret|psk)[A-Za-z0-9_]*=)(.*)""", RegexOption.IGNORE_CASE)
 
 /** Hides Wi-Fi passwords in `uci changes` text before it is shown on screen. */
 fun maskSecrets(text: String): String = text.lineSequence().joinToString("\n") { line ->

@@ -8,6 +8,9 @@ class FakeSshExecutor(
     val responses: MutableMap<String, ExecResult> = mutableMapOf(),
 ) : SshExecutor {
     val commands = mutableListOf<String>()
+
+    /** Commands and connection closes in the order they happened. A close is recorded as "<close>". */
+    val events = mutableListOf<String>()
     var failWith: SshError? = null
 
     /** Simulates a bug or platform failure that is not a transport error. */
@@ -21,15 +24,20 @@ class FakeSshExecutor(
         responses[command] = ExecResult(exitCode, stdout, stderr)
     }
 
-    override suspend fun exec(command: String, timeoutMs: Long): ExecResult {
+    /** When a script is sent as input, the script is what matters, so that is what gets recorded and matched. */
+    override suspend fun exec(command: String, timeoutMs: Long, stdin: String?): ExecResult = run(stdin ?: command)
+
+    private fun run(command: String): ExecResult {
         failWith?.let { throw it }
         crashWith?.let { throw it }
         commands += command
+        events += command
         handler?.invoke(command)?.let { return it }
         return responses[command] ?: ExecResult(127, "", "not found")
     }
 
     override suspend fun close() {
         closed = true
+        events += "<close>"
     }
 }

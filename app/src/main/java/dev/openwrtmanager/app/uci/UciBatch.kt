@@ -23,6 +23,9 @@ class UciBatch {
     fun set(config: String, section: String, option: String, value: String): UciBatch =
         add(config, "set ${id(config)}.${id(section)}.${id(option)}=${quote(value)}")
 
+    fun delList(config: String, section: String, option: String, value: String): UciBatch =
+        add(config, "del_list ${id(config)}.${id(section)}.${id(option)}=${quote(value)}")
+
     fun addList(config: String, section: String, option: String, value: String): UciBatch =
         add(config, "add_list ${id(config)}.${id(section)}.${id(option)}=${quote(value)}")
 

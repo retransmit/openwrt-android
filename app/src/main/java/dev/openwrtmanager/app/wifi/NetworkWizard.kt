@@ -31,14 +31,17 @@ data class DeviceSnapshot(
     val hasUplink: Boolean,
 )
 
-suspend fun loadSnapshot(router: RouterClient, uci: UciClient): DeviceSnapshot = DeviceSnapshot(
+suspend fun loadSnapshot(router: RouterClient, uci: UciClient): DeviceSnapshot {
+    val network = uci.load("network")
+    return DeviceSnapshot(
     wireless = uci.load("wireless"),
-    network = uci.load("network"),
+    network = network,
     firewall = uci.load("firewall"),
     dhcp = uci.load("dhcp"),
-    usedSubnets = router.usedSubnets(),
+    usedSubnets = (router.usedSubnets() + configuredSubnets(network)).distinct(),
     hasUplink = router.uplinkDevice() != null,
-)
+    )
+}
 
 enum class BlockReason { NO_UPLINK, NO_WAN_ZONE, NO_FREE_SUBNET, NO_RADIO }
 
@@ -99,7 +102,7 @@ object NetworkWizard {
         val homeCanReach = input.kind == WizardKind.IOT && input.lanCanReachIot && lanZone != null
         if (homeCanReach) {
             batch.section("firewall", "lan_$name", "forwarding")
-            batch.set("firewall", "lan_$name", "src", lanZone!!)
+            batch.set("firewall", "lan_$name", "src", lanZone)
             batch.set("firewall", "lan_$name", "dest", name)
         }
 
@@ -118,7 +121,8 @@ object NetworkWizard {
             summary += "Devices on it can reach the internet, but cannot start connections to your home network"
             summary += if (homeCanReach) "Your home devices can reach devices on it" else "Your home devices cannot reach devices on it"
         }
-        summary += "Devices on it cannot see each other"
+        // Isolation is per radio: devices on different bands of the same network still share its bridge.
+        summary += if (radios.size == 1) "Devices on it cannot see each other" else "Devices on the same band cannot see each other"
         val title = if (input.kind == WizardKind.GUEST) "Create guest network" else "Create IoT network"
         return WizardPlan.Ready(ChangeSet.of(title, summary, batch), name, subnet)
     }
@@ -137,12 +141,16 @@ object NetworkWizard {
         deleteAll("wireless", snapshot.wireless.ofType("wifi-iface").filter { networkName in it.list("network") })
         deleteAll("dhcp", snapshot.dhcp.ofType("dhcp").filter { it.opt("interface") == networkName })
 
-        val zones = snapshot.firewall.ofType("zone").filter { it.opt("name") == networkName || networkName in it.list("network") }
-        val zoneNames = zones.mapNotNull { it.opt("name") }.toSet()
+        // A zone is deleted only when this network is all it holds. A shared zone (for example the home
+        // zone with a second network added to it) just loses this one entry and keeps its rules.
+        val holding = snapshot.firewall.ofType("zone").filter { it.opt("name") == networkName || networkName in it.list("network") }
+        val (own, shared) = holding.partition { zone -> zone.list("network").all { it == networkName } }
+        val ownNames = own.mapNotNull { it.opt("name") }.toSet()
         val attached = snapshot.firewall.sections.filter {
-            it.type in setOf("forwarding", "rule", "redirect") && (it.opt("src") in zoneNames || it.opt("dest") in zoneNames)
+            it.type in setOf("forwarding", "rule", "redirect") && (it.opt("src") in ownNames || it.opt("dest") in ownNames)
         }
-        deleteAll("firewall", zones + attached)
+        deleteAll("firewall", own + attached)
+        shared.filter { networkName in it.list("network") }.forEach { batch.delList("firewall", it.name, "network", networkName) }
 
         val iface = snapshot.network["$networkName"]?.takeIf { it.type == "interface" }
         val device = iface?.opt("device")
