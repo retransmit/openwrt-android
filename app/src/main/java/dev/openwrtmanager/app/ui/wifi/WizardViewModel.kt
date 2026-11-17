@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.openwrtmanager.app.apply.ChangeSet
 import dev.openwrtmanager.app.domain.Band
+import dev.openwrtmanager.app.vlan.PortRole
+import dev.openwrtmanager.app.vlan.vlanLayoutOf
 import dev.openwrtmanager.app.wifi.BlockReason
 import dev.openwrtmanager.app.wifi.DeviceSnapshot
 import dev.openwrtmanager.app.wifi.KeyError
@@ -54,6 +56,9 @@ data class WizardUi(
     val keyError: KeyError? = null,
     val subnet: String? = null,
     val qrPayload: String? = null,
+    /** Bridge ports the network can also be put on. Empty on a device without a DSA bridge. */
+    val ports: List<String> = emptyList(),
+    val portRoles: Map<String, PortRole> = emptyMap(),
 ) {
     override fun toString(): String = "WizardUi($kind, ssid=$ssid, radios=$radios, blocked=$blocked, loaded=$loaded)"
 }
@@ -90,6 +95,7 @@ class WizardViewModel @Inject constructor(
                     // Most smart home devices only speak 2.4 GHz, so that is where an IoT network starts.
                     radios = if (kind == WizardKind.IOT && lowBand.isNotEmpty()) lowBand else all,
                     availableRadios = wifi.radios,
+                    ports = vlanLayoutOf(snap.network)?.ports.orEmpty(),
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -104,6 +110,9 @@ class WizardViewModel @Inject constructor(
     fun regeneratePassword() = _ui.update { it.copy(key = passwords.next(), keyError = null) }
     fun onRadio(radio: String, on: Boolean) = _ui.update { it.copy(radios = if (on) it.radios + radio else it.radios - radio) }
     fun onLanCanReachIot(value: Boolean) = _ui.update { it.copy(lanCanReachIot = value) }
+    fun onPortRole(port: String, role: PortRole) = _ui.update {
+        it.copy(portRoles = if (role == PortRole.NONE) it.portRoles - port else it.portRoles + (port to role))
+    }
 
     /** Validates the form and returns the change to review, or null with errors or a block reason set. */
     fun review(): ChangeSet? {
@@ -115,7 +124,7 @@ class WizardViewModel @Inject constructor(
             _ui.update { it.copy(ssidError = ssidError, keyError = keyError) }
             return null
         }
-        val input = WizardInput(ui.kind, ui.ssid, ui.security, ui.key, ui.radios, ui.lanCanReachIot)
+        val input = WizardInput(ui.kind, ui.ssid, ui.security, ui.key, ui.radios, ui.lanCanReachIot, ports = ui.portRoles)
         return when (val plan = NetworkWizard.plan(snap, input)) {
             is WizardPlan.Ready -> {
                 _ui.update { it.copy(subnet = plan.subnet) }

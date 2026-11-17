@@ -294,6 +294,36 @@ class WizardViewModelTest {
         vm.start(WizardKind.GUEST)
         assertTrue(vm.ui.value.failed)
     }
+
+    @Test
+    fun ports_step_lists_bridge_ports_with_none_selected() = runTest {
+        val vm = viewModel()
+        vm.start(WizardKind.GUEST)
+        assertEquals(listOf("lan1", "lan2", "lan3", "lan4"), vm.ui.value.ports)
+        assertEquals(emptyMap<String, dev.openwrtmanager.app.vlan.PortRole>(), vm.ui.value.portRoles)
+    }
+
+    @Test
+    fun chosen_roles_reach_the_plan() = runTest {
+        val vm = viewModel()
+        vm.start(WizardKind.IOT)
+        vm.onPortRole("lan3", dev.openwrtmanager.app.vlan.PortRole.UNTAGGED)
+        vm.onPortRole("lan4", dev.openwrtmanager.app.vlan.PortRole.TAGGED)
+        vm.onPortRole("lan4", dev.openwrtmanager.app.vlan.PortRole.NONE)
+        val script = vm.review()!!.batch.script()
+        assertTrue("add_list network.vlan_iot.ports='lan3:u*'" in script)
+        assertFalse("lan4:t" in script)
+    }
+
+    @Test
+    fun ports_step_hidden_without_dsa() = runTest {
+        gateway.snapshot = routerSnapshot().let { s ->
+            s.copy(network = s.network.copy(sections = s.network.sections.map { if (it.type == "device") it.copy(lists = it.lists - "ports") else it }))
+        }
+        val vm = viewModel()
+        vm.start(WizardKind.GUEST)
+        assertEquals(emptyList<String>(), vm.ui.value.ports)
+    }
 }
 
 class NetworkEditSafetyTest {

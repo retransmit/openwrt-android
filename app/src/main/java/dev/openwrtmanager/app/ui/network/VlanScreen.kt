@@ -200,7 +200,7 @@ private fun VlanCard(row: VlanRow, ports: List<String>, onEdit: () -> Unit, onRe
 /** One row per port: not a member, untagged (device port) or tagged (link to an access point). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PortRolesEditor(ports: List<String>, roles: MutableMap<String, PortRole>) {
+internal fun PortRolesEditor(ports: List<String>, roles: Map<String, PortRole>, onRole: (String, PortRole) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ports.forEach { port ->
             Text(port, style = MaterialTheme.typography.labelLarge)
@@ -209,7 +209,7 @@ private fun PortRolesEditor(ports: List<String>, roles: MutableMap<String, PortR
                 options.forEachIndexed { index, (role, label) ->
                     SegmentedButton(
                         selected = (roles[port] ?: PortRole.NONE) == role,
-                        onClick = { roles[port] = role },
+                        onClick = { onRole(port, role) },
                         shape = SegmentedButtonDefaults.itemShape(index, options.size),
                     ) { Text(label) }
                 }
@@ -234,7 +234,7 @@ private fun PortRolesSheet(row: VlanRow, ports: List<String>, onDismiss: () -> U
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            PortRolesEditor(ports, roles)
+            PortRolesEditor(ports, roles) { port, role -> roles[port] = role }
             Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) { Text("Cancel") }
                 Button(onClick = { onSave(roles.toMap()) }) { Text("Review") }
@@ -293,7 +293,7 @@ private fun CreateVlanSheet(
                 Switch(checked = routed, onCheckedChange = { routed = it })
             }
             Text("Ports", style = MaterialTheme.typography.titleMedium)
-            PortRolesEditor(ports, roles)
+            PortRolesEditor(ports, roles) { port, role -> roles[port] = role }
             Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) { Text("Cancel") }
                 Button(
