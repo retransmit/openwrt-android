@@ -30,6 +30,10 @@ data class VlanLayout(
     fun untaggedIn(port: String): Int? = vlans.firstOrNull { it.roles[port] == PortRole.UNTAGGED }?.vid
 }
 
+/** True when some enabled Wi-Fi network puts devices on the home network. */
+fun homeWifiOn(wireless: UciConfig): Boolean =
+    wireless.ofType("wifi-iface").any { "lan" in it.list("network") && !it.flag("disabled") }
+
 /** Reads one entry of a `bridge-vlan` ports list. A port with no suffix counts as tagged. */
 fun parsePortRole(token: String): Pair<String, PortRole> {
     val port = token.substringBefore(':')
