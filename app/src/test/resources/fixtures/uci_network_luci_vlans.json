@@ -1,0 +1,66 @@
+{
+	"values": {
+		"cfg010f15": {
+			".anonymous": true,
+			".type": "device",
+			".name": "cfg010f15",
+			".index": 0,
+			"name": "br-lan",
+			"type": "bridge",
+			"ports": [
+				"lan1",
+				"lan2",
+				"lan3"
+			]
+		},
+		"cfg020f15": {
+			".anonymous": true,
+			".type": "bridge-vlan",
+			".name": "cfg020f15",
+			".index": 1,
+			"device": "br-lan",
+			"vlan": "1",
+			"ports": [
+				"lan1:u*",
+				"lan2"
+			]
+		},
+		"cfg030f15": {
+			".anonymous": true,
+			".type": "bridge-vlan",
+			".name": "cfg030f15",
+			".index": 2,
+			"device": "br-lan",
+			"vlan": "3",
+			"ports": "lan3:u*"
+		},
+		"cfg040f15": {
+			".anonymous": true,
+			".type": "bridge-vlan",
+			".name": "cfg040f15",
+			".index": 3,
+			"device": "br-other",
+			"vlan": "7",
+			"ports": [
+				"lan9:t"
+			]
+		},
+		"lan": {
+			".anonymous": false,
+			".type": "interface",
+			".name": "lan",
+			".index": 4,
+			"device": "br-lan.1",
+			"proto": "static",
+			"ipaddr": "192.168.1.1/24"
+		},
+		"cams": {
+			".anonymous": false,
+			".type": "interface",
+			".name": "cams",
+			".index": 5,
+			"device": "br-lan.3",
+			"proto": "none"
+		}
+	}
+}
