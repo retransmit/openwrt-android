@@ -8,6 +8,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -22,13 +24,15 @@ import androidx.compose.ui.Modifier
 /** Everything that is not a main tab. Device admin and the config editor join this list later. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MoreScreen(onFirewall: () -> Unit, onServices: () -> Unit, onLogs: () -> Unit, onSystem: () -> Unit) {
+fun MoreScreen(onFirewall: () -> Unit, onServices: () -> Unit, onLogs: () -> Unit, onSystem: () -> Unit, onPackages: () -> Unit, onBackup: () -> Unit) {
     Scaffold(topBar = { TopAppBar(title = { Text("More") }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Entry(Icons.Default.Security, "Firewall", "Port forwards, traffic rules and zones", onFirewall)
             Entry(Icons.Default.Settings, "System", "Device name, time zone, root password, reboot", onSystem)
             Entry(Icons.Default.PlayCircle, "Services", "Start, stop and enable what runs on the device", onServices)
             Entry(Icons.AutoMirrored.Filled.Article, "Logs", "System and kernel log, live", onLogs)
+            Entry(Icons.Default.Inventory2, "Packages", "Installed software, install and remove", onPackages)
+            Entry(Icons.Default.Backup, "Backup", "Save settings to this phone, or restore them", onBackup)
         }
     }
 }
