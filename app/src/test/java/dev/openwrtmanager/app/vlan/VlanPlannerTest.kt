@@ -173,6 +173,32 @@ class VlanPlannerTest {
     }
 
     @Test
+    fun device_port_whose_vlan_is_removed_goes_back_home() {
+        val withTv = VlanPlanner.setRoles(vlans, UciBatch(), 10, mapOf("lan3" to PortRole.UNTAGGED))
+        val batch = UciBatch()
+        val after = VlanPlanner.removeVlan(withTv, batch, 10)
+        assertEquals(PortRole.UNTAGGED, after.vlan(1)!!.roles["lan3"])
+        assertTrue("add_list network.vlan_lan.ports='lan3:u*'" in batch.script().lines())
+        assertTrue("lan3 is back on your home network" in VlanPlanner.summary(withTv, after))
+    }
+
+    @Test
+    fun device_port_set_to_none_or_tagged_goes_back_home() {
+        val withTv = VlanPlanner.setRoles(vlans, UciBatch(), 10, mapOf("lan3" to PortRole.UNTAGGED))
+        for (role in listOf(PortRole.NONE, PortRole.TAGGED)) {
+            val after = VlanPlanner.setRoles(withTv, UciBatch(), 10, mapOf("lan3" to role))
+            assertEquals(role.name, PortRole.UNTAGGED, after.vlan(1)!!.roles["lan3"])
+            assertEquals(role, after.vlan(10)!!.roles["lan3"])
+        }
+    }
+
+    @Test
+    fun port_taken_off_the_home_network_on_purpose_stays_off() {
+        val after = VlanPlanner.setRoles(vlans, UciBatch(), 1, mapOf("lan2" to PortRole.NONE))
+        assertEquals(PortRole.NONE, after.vlan(1)!!.roles["lan2"])
+    }
+
+    @Test
     fun summary_says_what_happens_in_plain_words() {
         val batch = UciBatch()
         var after = VlanPlanner.enableFiltering(plain, network, batch)

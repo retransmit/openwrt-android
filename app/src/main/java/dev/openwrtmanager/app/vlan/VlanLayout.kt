@@ -21,6 +21,8 @@ data class VlanLayout(
     val vlans: List<BridgeVlan>,
     /** VLAN ID to the interface whose device is `<bridge>.<vid>`. */
     val interfaces: Map<Int, String>,
+    /** The VLAN the lan interface is on, when it is on one. */
+    val homeVid: Int? = null,
 ) {
     val filtering: Boolean get() = vlans.isNotEmpty()
 
@@ -47,11 +49,14 @@ fun parsePortRole(token: String): Pair<String, PortRole> {
  */
 fun vlanLayoutOf(network: UciConfig, lanInterface: String = "lan"): VlanLayout? {
     val device = network[lanInterface]?.takeIf { it.type == "interface" }?.opt("device") ?: return null
+    // swconfig devices bridge VLAN subinterfaces such as eth0.1 and keep VLANs in switch sections: not handled.
+    if (network.ofType("switch").isNotEmpty()) return null
     fun bridgeNamed(name: String): UciSection? =
         network.ofType("device").firstOrNull { it.opt("name") == name && it.opt("type") == "bridge" && it.list("ports").isNotEmpty() }
     val bridgeSection = bridgeNamed(device) ?: device.takeIf { '.' in it }?.let { bridgeNamed(it.substringBeforeLast('.')) } ?: return null
     val bridge = bridgeSection.opt("name")!!
     val ports = bridgeSection.list("ports")
+    if (ports.any { '.' in it }) return null
 
     val vlans = network.ofType("bridge-vlan").filter { it.opt("device") == bridge }.mapNotNull { section ->
         val vid = section.opt("vlan")?.toIntOrNull() ?: return@mapNotNull null
@@ -59,10 +64,12 @@ fun vlanLayoutOf(network: UciConfig, lanInterface: String = "lan"): VlanLayout? 
         BridgeVlan(section.name, vid, ports.associateWith { listed[it] ?: PortRole.NONE })
     }.sortedBy { it.vid }
 
-    val interfaces = network.ofType("interface").mapNotNull { iface ->
-        val vid = iface.opt("device")?.takeIf { it.startsWith("$bridge.") }?.substringAfter("$bridge.")?.toIntOrNull()
-        vid?.let { it to iface.name }
-    }.toMap()
+    fun vidOf(name: String?): Int? = name?.takeIf { it.startsWith("$bridge.") }?.substringAfter("$bridge.")?.toIntOrNull()
+    // Several interfaces can share a VLAN: the lan interface names its VLAN, otherwise the first one does.
+    val interfaces = network.ofType("interface")
+        .mapNotNull { iface -> vidOf(iface.opt("device"))?.let { it to iface.name } }
+        .groupBy({ it.first }, { it.second })
+        .mapValues { (_, names) -> if (lanInterface in names) lanInterface else names.first() }
 
-    return VlanLayout(bridgeSection.name, bridge, ports, vlans, interfaces)
+    return VlanLayout(bridgeSection.name, bridge, ports, vlans, interfaces, vidOf(device))
 }

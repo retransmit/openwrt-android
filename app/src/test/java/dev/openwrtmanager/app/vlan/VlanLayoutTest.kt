@@ -69,6 +69,28 @@ class VlanLayoutTest {
     }
 
     @Test
+    fun home_vlan_comes_from_lan_even_when_another_interface_shares_it() {
+        val base = load("uci_network_luci_vlans.json")
+        val network = base.copy(
+            sections = base.sections.map { if (it.name == "lan") it.copy(options = it.options + ("device" to "br-lan.3")) else it } +
+                UciSection("alias", "interface", false, 99, mapOf("device" to "br-lan.3", "proto" to "static"), emptyMap()),
+        )
+        val layout = vlanLayoutOf(network)!!
+        assertEquals(3, layout.homeVid)
+        assertEquals("lan", layout.interfaces[3])
+        assertEquals(3, VlanPlanner.lanVid(layout))
+    }
+
+    @Test
+    fun swconfig_router_is_not_handled() {
+        fun device(ports: List<String>) = UciSection("br", "device", false, 0, mapOf("name" to "br-lan", "type" to "bridge"), mapOf("ports" to ports))
+        val lan = UciSection("lan", "interface", false, 1, mapOf("device" to "br-lan"), emptyMap())
+        assertNull("VLAN subinterfaces as ports", vlanLayoutOf(UciConfig("network", listOf(device(listOf("eth0.1")), lan))))
+        val switch = UciSection("sw", "switch", false, 2, mapOf("name" to "switch0"), emptyMap())
+        assertNull("a switch section", vlanLayoutOf(UciConfig("network", listOf(device(listOf("lan1")), lan, switch))))
+    }
+
+    @Test
     fun no_bridge_is_null() {
         val network = UciConfig(
             "network",

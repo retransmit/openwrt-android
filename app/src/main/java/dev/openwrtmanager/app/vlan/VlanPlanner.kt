@@ -22,7 +22,7 @@ object VlanPlanner {
     private const val MAX_VID = 4094
 
     /** The VLAN the home network is on: VLAN 1 unless the router was set up otherwise. */
-    fun lanVid(layout: VlanLayout): Int = layout.interfaces.entries.firstOrNull { it.value == "lan" }?.key ?: LAN_VID
+    fun lanVid(layout: VlanLayout): Int = layout.homeVid ?: LAN_VID
 
     /**
      * Turns on VLAN filtering with every port untagged in VLAN 1, and moves every interface on the
@@ -40,7 +40,7 @@ object VlanPlanner {
         for (iface in moved) batch.set("network", iface.name, "device", "${layout.bridge}.$LAN_VID")
         val lan = BridgeVlan(section, LAN_VID, layout.ports.associateWith { PortRole.UNTAGGED })
         val interfaces = moved.firstOrNull()?.let { layout.interfaces + (LAN_VID to it.name) } ?: layout.interfaces
-        return layout.copy(vlans = listOf(lan), interfaces = interfaces)
+        return layout.copy(vlans = listOf(lan), interfaces = interfaces, homeVid = LAN_VID)
     }
 
     /** A problem with using [vid] for a new VLAN, or null when it is free and valid. */
@@ -73,16 +73,35 @@ object VlanPlanner {
      */
     fun setRoles(layout: VlanLayout, batch: UciBatch, vid: Int, roles: Map<String, PortRole>): VlanLayout {
         requireNotNull(layout.vlan(vid)) { "no VLAN $vid" }
-        val after = withRoles(layout, vid, roles)
+        val after = returnHome(layout, withRoles(layout, vid, roles))
         rewriteChanged(batch, layout, after, except = null)
         return after
     }
 
+    /** Removes VLAN [vid]. Its device ports go back to the home network rather than being left on none. */
     fun removeVlan(layout: VlanLayout, batch: UciBatch, vid: Int): VlanLayout {
         require(vid != lanVid(layout)) { "the home network's VLAN cannot be removed" }
         val vlan = requireNotNull(layout.vlan(vid)) { "no VLAN $vid" }
         batch.delete("network", vlan.section)
-        return layout.copy(vlans = layout.vlans - vlan, interfaces = layout.interfaces - vid)
+        val after = returnHome(layout, layout.copy(vlans = layout.vlans - vlan, interfaces = layout.interfaces - vid))
+        rewriteChanged(batch, layout, after, except = null)
+        return after
+    }
+
+    /**
+     * A port that was a device port of some other VLAN and is now untagged nowhere would be dead:
+     * it goes back to the home network instead. A port taken off the home network on purpose stays off.
+     */
+    private fun returnHome(before: VlanLayout, after: VlanLayout): VlanLayout {
+        val home = lanVid(after)
+        val homeVlan = after.vlan(home) ?: return after
+        val orphans = after.ports.filter { port ->
+            val was = before.untaggedIn(port)
+            was != null && was != home && after.untaggedIn(port) == null
+        }
+        if (orphans.isEmpty()) return after
+        val restored = homeVlan.copy(roles = homeVlan.roles + orphans.associateWith { PortRole.UNTAGGED })
+        return after.copy(vlans = after.vlans.map { if (it.vid == home) restored else it })
     }
 
     fun validate(layout: VlanLayout, lanHasWifi: Boolean): List<VlanProblem> {

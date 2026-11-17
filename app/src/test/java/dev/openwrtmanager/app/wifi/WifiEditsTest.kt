@@ -22,7 +22,8 @@ class WifiValidationTest {
     @Test
     fun sixty_four_hex_key_is_valid() {
         assertNull(validateKey("0123456789abcdefABCDEF".repeat(3).take(64), Security.WPA2))
-        assertNull(validateKey("f".repeat(64), Security.WPA2_WPA3))
+        assertEquals("WPA3 cannot use a raw key", KeyError.TOO_LONG, validateKey("f".repeat(64), Security.WPA2_WPA3))
+        assertEquals(KeyError.TOO_LONG, validateKey("f".repeat(64), Security.WPA3))
     }
 
     @Test
