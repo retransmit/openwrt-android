@@ -73,6 +73,7 @@ import dev.openwrtmanager.app.wifi.wifiQrPayload
 fun WifiScreen(
     onEditNetwork: (String?) -> Unit,
     onWizard: (WizardKind) -> Unit,
+    onMirror: () -> Unit,
     viewModel: WifiViewModel = hiltViewModel(),
     applyViewModel: ApplyViewModel = hiltViewModel(),
 ) {
@@ -111,6 +112,18 @@ fun WifiScreen(
                             Button(onClick = { onEditNetwork(null) }) {
                                 Icon(Icons.Default.Add, contentDescription = null)
                                 Text(" Add network")
+                            }
+                        }
+                        if (!state.canCreateIsolatedNetworks) {
+                            ElevatedCard(Modifier.fillMaxWidth()) {
+                                ListItem(
+                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                    modifier = Modifier.clickable(onClick = onMirror),
+                                    leadingContent = { Icon(Icons.Default.Groups, contentDescription = null) },
+                                    headlineContent = { Text("Add a network from my router") },
+                                    supportingContent = { Text("Put your router's guest or IoT network on this access point") },
+                                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
+                                )
                             }
                         }
                         ElevatedCard(Modifier.fillMaxWidth()) {

@@ -78,6 +78,7 @@ fun AppNav() {
                 onAddDevice = { nav.navigate(editRoute(null)) },
                 onEditNetwork = { section -> nav.navigate("wifi/network?section=${section.orEmpty()}") },
                 onWizard = { kind -> nav.navigate("wifi/wizard/${kind.name}") },
+                onMirror = { nav.navigate("wifi/mirror") },
             )
         }
         composable(
@@ -93,6 +94,9 @@ fun AppNav() {
         composable("wifi/wizard/{kind}") { entry ->
             val kind = runCatching { WizardKind.valueOf(entry.arguments?.getString("kind").orEmpty()) }.getOrDefault(WizardKind.GUEST)
             WizardScreen(kind = kind, onDone = { nav.popBackStack() }, onBack = { nav.popBackStack() })
+        }
+        composable("wifi/mirror") {
+            dev.openwrtmanager.app.ui.wifi.MirrorScreen(onDone = { nav.popBackStack() }, onBack = { nav.popBackStack() })
         }
         composable(ROUTE_DEVICES) {
             DevicesScreen(
@@ -125,6 +129,7 @@ private fun MainTabs(
     onAddDevice: () -> Unit,
     onEditNetwork: (String?) -> Unit,
     onWizard: (WizardKind) -> Unit,
+    onMirror: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var switcherOpen by rememberSaveable { mutableStateOf(false) }
@@ -144,7 +149,7 @@ private fun MainTabs(
         when (tab) {
             Tab.HOME -> HomeScreen(onSwitchDevice = { switcherOpen = true }, onAddDevice = onAddDevice)
             Tab.NETWORK -> dev.openwrtmanager.app.ui.network.VlanScreen()
-            Tab.WIFI -> WifiScreen(onEditNetwork = onEditNetwork, onWizard = onWizard)
+            Tab.WIFI -> WifiScreen(onEditNetwork = onEditNetwork, onWizard = onWizard, onMirror = onMirror)
             else -> ComingLater(tab)
         }
     }

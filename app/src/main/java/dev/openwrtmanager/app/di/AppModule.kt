@@ -83,6 +83,14 @@ object ConnectionModule {
         dev.openwrtmanager.app.connection.SshExecutorFactory { target -> dev.openwrtmanager.app.ssh.SshjExecutor(target) }
 
     @Provides
+    fun profileSessions(
+        profiles: ProfileRepository,
+        secrets: SecretStore,
+        factory: dev.openwrtmanager.app.connection.SshExecutorFactory,
+    ): dev.openwrtmanager.app.connection.ProfileSessions =
+        dev.openwrtmanager.app.connection.StoredProfileSessions(profiles, secrets, factory)
+
+    @Provides
     @Singleton
     fun connectionManager(
         profiles: ProfileRepository,
@@ -126,18 +134,11 @@ object ApplyModule {
     @Provides
     fun applySessionFactory(
         profiles: ProfileRepository,
-        secrets: SecretStore,
-        executors: dev.openwrtmanager.app.connection.SshExecutorFactory,
+        sessions: dev.openwrtmanager.app.connection.ProfileSessions,
         time: dev.openwrtmanager.app.domain.TimeSource,
     ): dev.openwrtmanager.app.ui.apply.ApplySessionFactory = dev.openwrtmanager.app.ui.apply.ApplySessionFactory {
         val id = profiles.observeActiveId().first() ?: return@ApplySessionFactory null
-        val profile = profiles.get(id) ?: return@ApplySessionFactory null
-        val secret = secrets.get(id) ?: return@ApplySessionFactory null
-        val executor = executors.create(
-            dev.openwrtmanager.app.ssh.SshTarget(
-                profile.host, profile.port, profile.username, profile.authType, secret, profile.hostKeyFingerprint,
-            ),
-        )
+        val executor = sessions.open(id) ?: return@ApplySessionFactory null
         dev.openwrtmanager.app.ui.apply.ApplySession(
             dev.openwrtmanager.app.apply.SafeApply(executor, time),
             health = { names -> dev.openwrtmanager.app.apply.HealthCheck(executor).check(names) },
