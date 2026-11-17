@@ -166,6 +166,23 @@ object WifiModule {
     }
 
     @Provides
+    fun adminGatewayProvider(
+        connection: dev.openwrtmanager.app.connection.ConnectionManager,
+    ): dev.openwrtmanager.app.admin.AdminGatewayProvider = dev.openwrtmanager.app.admin.AdminGatewayProvider {
+        (connection.state.value as? dev.openwrtmanager.app.connection.ConnectionState.Online)
+            ?.let { dev.openwrtmanager.app.admin.SshAdminGateway(it.ssh) }
+    }
+
+    @Provides
+    @Singleton
+    fun zoneSource(@ApplicationContext context: Context): dev.openwrtmanager.app.ui.admin.ZoneSource {
+        val zones by lazy {
+            dev.openwrtmanager.app.admin.parseZones(context.assets.open("zoneinfo.tsv").bufferedReader().use { it.readText() })
+        }
+        return dev.openwrtmanager.app.ui.admin.ZoneSource { zones }
+    }
+
+    @Provides
     fun passwordSource(): dev.openwrtmanager.app.ui.wifi.PasswordSource {
         val random = java.security.SecureRandom()
         return dev.openwrtmanager.app.ui.wifi.PasswordSource { dev.openwrtmanager.app.ui.wifi.generateWifiPassword(random) }

@@ -80,6 +80,9 @@ fun AppNav() {
                 onWizard = { kind -> nav.navigate("wifi/wizard/${kind.name}") },
                 onMirror = { nav.navigate("wifi/mirror") },
                 onFirewall = { nav.navigate("firewall") },
+                onServices = { nav.navigate("services") },
+                onLogs = { nav.navigate("logs") },
+                onSystem = { nav.navigate("system") },
             )
         }
         composable(
@@ -96,6 +99,9 @@ fun AppNav() {
             val kind = runCatching { WizardKind.valueOf(entry.arguments?.getString("kind").orEmpty()) }.getOrDefault(WizardKind.GUEST)
             WizardScreen(kind = kind, onDone = { nav.popBackStack() }, onBack = { nav.popBackStack() })
         }
+        composable("services") { dev.openwrtmanager.app.ui.admin.ServicesScreen(onBack = { nav.popBackStack() }) }
+        composable("logs") { dev.openwrtmanager.app.ui.admin.LogsScreen(onBack = { nav.popBackStack() }) }
+        composable("system") { dev.openwrtmanager.app.ui.admin.SystemScreen(onBack = { nav.popBackStack() }) }
         composable("firewall") {
             dev.openwrtmanager.app.ui.firewall.FirewallScreen(onBack = { nav.popBackStack() })
         }
@@ -135,6 +141,9 @@ private fun MainTabs(
     onWizard: (WizardKind) -> Unit,
     onMirror: () -> Unit,
     onFirewall: () -> Unit,
+    onServices: () -> Unit,
+    onLogs: () -> Unit,
+    onSystem: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var switcherOpen by rememberSaveable { mutableStateOf(false) }
@@ -154,7 +163,7 @@ private fun MainTabs(
         when (tab) {
             Tab.HOME -> HomeScreen(onSwitchDevice = { switcherOpen = true }, onAddDevice = onAddDevice)
             Tab.NETWORK -> dev.openwrtmanager.app.ui.network.VlanScreen()
-            Tab.MORE -> dev.openwrtmanager.app.ui.more.MoreScreen(onFirewall = onFirewall)
+            Tab.MORE -> dev.openwrtmanager.app.ui.more.MoreScreen(onFirewall = onFirewall, onServices = onServices, onLogs = onLogs, onSystem = onSystem)
             Tab.CLIENTS -> dev.openwrtmanager.app.ui.clients.ClientsScreen()
             Tab.WIFI -> WifiScreen(onEditNetwork = onEditNetwork, onWizard = onWizard, onMirror = onMirror)
             else -> ComingLater(tab)
