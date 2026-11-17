@@ -295,3 +295,43 @@ class WizardViewModelTest {
         assertTrue(vm.ui.value.failed)
     }
 }
+
+class NetworkEditSafetyTest {
+    @get:Rule
+    val mainRule = MainDispatcherRule()
+
+    private val gateway = FakeWifiGateway()
+
+    @Test
+    fun network_with_a_security_mode_the_app_does_not_understand_is_read_only() = runTest {
+        val w = gateway.snapshot.wireless
+        gateway.snapshot = gateway.snapshot.copy(
+            wireless = w.copy(sections = w.sections.map { if (it.type == "wifi-iface") it.copy(options = it.options + ("encryption" to "wpa3-mixed")) else it }),
+        )
+        val vm = NetworkEditViewModel { gateway }
+        vm.start("default_radio0")
+        assertTrue(vm.form.value.readOnly)
+        vm.onSsid("Changed")
+        assertFalse(vm.form.value.canSave)
+        assertNull(vm.save())
+        assertNull("steering would rewrite the security mode too", vm.steeringChange(enable = true, fastRoaming = false))
+    }
+
+    @Test
+    fun removing_a_hand_made_network_only_removes_its_wifi() = runTest {
+        fun s(name: String, type: String, o: Map<String, String>) = UciSection(name, type, false, 90, o, emptyMap())
+        val snap = gateway.snapshot
+        gateway.snapshot = snap.copy(
+            wireless = snap.wireless.copy(
+                sections = snap.wireless.sections + s(
+                    "office_radio0", "wifi-iface",
+                    mapOf("device" to "radio0", "mode" to "ap", "network" to "office", "ssid" to "Office", "encryption" to "psk2", "key" to "officepass1"),
+                ),
+            ),
+            network = snap.network.copy(sections = snap.network.sections + s("office", "interface", mapOf("device" to "br-office"))),
+        )
+        val vm = NetworkEditViewModel { gateway }
+        vm.start("office_radio0")
+        assertEquals(listOf("delete wireless.office_radio0"), vm.removeChange()!!.batch.script().lines())
+    }
+}

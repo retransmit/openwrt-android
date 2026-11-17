@@ -184,6 +184,15 @@ class SshjExecutorTest {
         assertTrue("took $elapsedMs ms", elapsedMs < 3_000)
     }
 
+    @Test
+    fun long_input_is_delivered_whole_and_the_command_sees_its_end() = runBlocking<Unit> {
+        // Far more than the 9000 bytes dropbear allows on a command line.
+        val script = (1..600).joinToString("\n") { "line $it with some padding to make it longer 📶" }
+        val result = executor().exec("cat", stdin = script)
+        assertEquals(0, result.exitCode)
+        assertEquals(script, result.stdout)
+    }
+
     private inline fun <reified E : SshError> expect(block: () -> Any?): E {
         try {
             block()
@@ -202,7 +211,9 @@ private class CannedCommand(private val command: String) : Command {
     private lateinit var exit: ExitCallback
     private var worker: Thread? = null
 
-    override fun setInputStream(input: InputStream) = Unit
+    private lateinit var input: InputStream
+
+    override fun setInputStream(input: InputStream) { this.input = input }
     override fun setOutputStream(output: OutputStream) { out = output }
     override fun setErrorStream(error: OutputStream) { err = error }
     override fun setExitCallback(callback: ExitCallback) { exit = callback }
@@ -214,6 +225,7 @@ private class CannedCommand(private val command: String) : Command {
                     "hello" -> { out.write("hello world\n".toByteArray()); out.flush(); exit.onExit(0) }
                     "fail3" -> { err.write("boom\n".toByteArray()); err.flush(); exit.onExit(3) }
                     "sleep" -> { Thread.sleep(5_000); exit.onExit(0) }
+                    "cat" -> { out.write(input.readBytes()); out.flush(); exit.onExit(0) }
                     else -> exit.onExit(127)
                 }
             } catch (_: InterruptedException) {

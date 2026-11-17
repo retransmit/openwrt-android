@@ -104,7 +104,7 @@ class ApplyViewModelTest {
         runCurrent()
         vm.confirm()
         runCurrent()
-        assertEquals(ApplyUi.Working(ApplyPhase.Staging, secondsLeft = 45), vm.ui.value)
+        assertEquals(ApplyUi.Working(ApplyPhase.Staging, secondsLeft = 90), vm.ui.value)
         phaseSink!!(ApplyPhase.Committing)
         assertEquals(ApplyPhase.Committing, (vm.ui.value as ApplyUi.Working).phase)
         outcome.complete(ApplyOutcome.Applied)
@@ -123,8 +123,8 @@ class ApplyViewModelTest {
         runCurrent()
         advanceTimeBy(3_000)
         runCurrent()
-        assertEquals(42, (vm.ui.value as ApplyUi.Working).secondsLeft)
-        advanceTimeBy(100_000)
+        assertEquals(87, (vm.ui.value as ApplyUi.Working).secondsLeft)
+        advanceTimeBy(200_000)
         runCurrent()
         assertEquals(0, (vm.ui.value as ApplyUi.Working).secondsLeft)
     }
@@ -201,5 +201,18 @@ class ApplyViewModelTest {
         runCurrent()
         assertTrue((vm.ui.value as ApplyUi.Done).outcome is ApplyOutcome.Unknown)
         assertNull(null)
+    }
+
+    @Test
+    fun apply_is_ignored_until_the_preview_has_finished() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.review(change) {}
+        vm.confirm()
+        runCurrent()
+        assertTrue("still reviewing: the preview must not overlap the apply", vm.ui.value is ApplyUi.Review)
+        assertEquals(0, applyCalls)
+        vm.confirm()
+        runCurrent()
+        assertEquals(1, applyCalls)
     }
 }

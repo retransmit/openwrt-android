@@ -45,18 +45,18 @@ class SshjExecutor(private val target: SshTarget) : SshExecutor {
         mutex.withLock { ensureConnected() }
     }
 
-    override suspend fun exec(command: String, timeoutMs: Long): ExecResult = mutex.withLock {
+    override suspend fun exec(command: String, timeoutMs: Long, stdin: String?): ExecResult = mutex.withLock {
         val reused = client?.let { it.isConnected && it.isAuthenticated } == true
         val first = ensureConnected()
         try {
-            run(first, command, timeoutMs)
+            run(first, command, timeoutMs, stdin)
         } catch (e: IOException) {
             drop()
             // A connection that was already open may simply have gone stale: try once on a fresh one.
             if (!reused) throw SshError.Disconnected(e)
             val fresh = ensureConnected()
             try {
-                run(fresh, command, timeoutMs)
+                run(fresh, command, timeoutMs, stdin)
             } catch (e2: IOException) {
                 drop()
                 throw SshError.Disconnected(e2)
@@ -115,8 +115,8 @@ class SshjExecutor(private val target: SshTarget) : SshExecutor {
      * closing the socket is the only thing that reliably unblocks a read when the peer has gone silent.
      * The next command reconnects.
      */
-    private suspend fun run(ssh: SSHClient, command: String, timeoutMs: Long): ExecResult {
-        val work = blockingWork.async { execBlocking(ssh, command) }
+    private suspend fun run(ssh: SSHClient, command: String, timeoutMs: Long, stdin: String?): ExecResult {
+        val work = blockingWork.async { execBlocking(ssh, command, stdin) }
         try {
             return withTimeout(timeoutMs) { work.await() }
         } catch (e: TimeoutCancellationException) {
@@ -131,10 +131,11 @@ class SshjExecutor(private val target: SshTarget) : SshExecutor {
         }
     }
 
-    private suspend fun execBlocking(ssh: SSHClient, command: String): ExecResult = coroutineScope {
+    private suspend fun execBlocking(ssh: SSHClient, command: String, stdin: String?): ExecResult = coroutineScope {
         val session = ssh.startSession()
         try {
             val cmd = session.exec(command)
+            if (stdin != null) cmd.outputStream.use { it.write(stdin.toByteArray(Charsets.UTF_8)) }
             val stderr = async { cmd.errorStream.readBytes() }
             val stdout = cmd.inputStream.readBytes()
             val stderrBytes = stderr.await()

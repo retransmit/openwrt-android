@@ -1,12 +1,14 @@
 package dev.openwrtmanager.app.wifi
 
-enum class SsidError { EMPTY, TOO_LONG }
+enum class SsidError { EMPTY, TOO_LONG, INVALID_CHARACTER }
 
 enum class KeyError { TOO_SHORT, TOO_LONG, NOT_ASCII }
 
 /** A network name is 1 to 32 bytes of UTF-8, so characters outside ASCII count for more than one. */
 fun validateSsid(ssid: String): SsidError? = when {
     ssid.isEmpty() -> SsidError.EMPTY
+    // Line breaks and other control characters cannot be stored in the config, and no device could type them.
+    ssid.any { it.code < 0x20 || it.code == 0x7f } -> SsidError.INVALID_CHARACTER
     ssid.toByteArray(Charsets.UTF_8).size > 32 -> SsidError.TOO_LONG
     else -> null
 }

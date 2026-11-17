@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openwrtmanager.app.apply.ApplyOutcome
 import dev.openwrtmanager.app.apply.ApplyPhase
+import dev.openwrtmanager.app.apply.SafeApply
 
 /**
  * Review, apply and result for one change. Shown whenever [viewModel] is not idle.
@@ -94,7 +95,7 @@ private fun Review(state: ApplyUi.Review, onApply: () -> Unit, onCancel: () -> U
                 Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
                 Text(
                     "Your phone may lose connection for a few seconds. If the app cannot reach the router again, " +
-                        "the router undoes this change by itself after 45 seconds.",
+                        "the router undoes this change by itself after ${SafeApply.DEFAULT_ROLLBACK_SECONDS} seconds.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
@@ -131,7 +132,8 @@ private fun Review(state: ApplyUi.Review, onApply: () -> Unit, onCancel: () -> U
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)) {
         OutlinedButton(onClick = onCancel) { Text("Cancel") }
-        Button(onClick = onApply) { Text("Apply") }
+        // Wait for the preview to finish: it stages and un-stages on the router and must not overlap the apply.
+        Button(onClick = onApply, enabled = !state.loadingChanges) { Text("Apply") }
     }
 }
 

@@ -51,10 +51,12 @@ class LiveSafeApplyTest {
             assertEquals("still there after the timer", "new", current())
 
             // 2. The app goes silent after committing: the router must restore the previous value by itself.
+            val silentUntil = System.currentTimeMillis() + 9_000
             val silent = object : SshExecutor {
-                override suspend fun exec(command: String, timeoutMs: Long): ExecResult {
-                    if ("OWM_CONFIRMED" in command) throw SshError.Unreachable()
-                    return ssh.exec(command, timeoutMs)
+                override suspend fun exec(command: String, timeoutMs: Long, stdin: String?): ExecResult {
+                    // Unreachable for the whole 6 s window, like a phone that lost the network; reachable again after.
+                    if ("OWM_CONFIRMED" in command && System.currentTimeMillis() < silentUntil) throw SshError.Unreachable()
+                    return ssh.exec(command, timeoutMs, stdin)
                 }
 
                 override suspend fun close() = Unit
@@ -63,6 +65,24 @@ class LiveSafeApplyTest {
             assertEquals(ApplyOutcome.RolledBack, unconfirmed.apply(change("newer")))
             assertEquals("rolled back to the value before", "new", current())
             assertEquals("nothing left staged", "", ssh.exec("$uci changes").stdout.trim())
+
+            // 3. A line the router refuses: nothing is committed and nothing stays staged.
+            val bad = ChangeSet("test", listOf("bad"), UciBatch().set("owmtest", "a", "value", "x").set("owmtest", "nosuch", "value", "y"), false)
+            val refused = confirming.apply(bad)
+            assertEquals(true, refused is ApplyOutcome.Rejected && "set owmtest.nosuch.value" in refused.reason)
+            assertEquals("the good line was not kept either", "new", current())
+            assertEquals("", ssh.exec("$uci changes").stdout.trim())
+
+            // 4. The same script sent twice must refuse the second time.
+            val script = dev.openwrtmanager.app.apply.ApplyScripts.apply(
+                UciBatch().set("owmtest", "a", "value", "twice").script().lines(), setOf("owmtest"), "0123456789ab", 6, "$dir/config", uci, "true",
+            )
+            val runner = dev.openwrtmanager.app.apply.ApplyScripts.runner("0123456789ab")
+            assertEquals(0, ssh.exec(runner, stdin = script).exitCode)
+            assertEquals(10, ssh.exec(runner, stdin = script).exitCode)
+            assertEquals("a cut-off upload is never run", 14, ssh.exec(runner, stdin = script.substringBeforeLast("\n")).exitCode)
+            delay(9_000)
+            assertEquals("unconfirmed duplicate was rolled back", "new", current())
             println("LIVE safe apply on $host: confirm kept the change, silence rolled it back")
         } finally {
             ssh.exec("rm -rf $dir /tmp/owm-apply-*")
@@ -102,7 +122,7 @@ class LiveSafeApplyTest {
                 ),
             ) as dev.openwrtmanager.app.wifi.WizardPlan.Ready
 
-            val apply = SafeApply(ssh, { System.currentTimeMillis() }, "$dir/config", 6, uci, "true")
+            val apply = SafeApply(ssh, { System.currentTimeMillis() }, "$dir/config", 6, uci, "true", holdOffMs = 1_000)
             assertEquals(ApplyOutcome.Applied, apply.apply(plan.change))
 
             suspend fun get(path: String) = ssh.exec("$uci -q get $path").stdout.trim()
