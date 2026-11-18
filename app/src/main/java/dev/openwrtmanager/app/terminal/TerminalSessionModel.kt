@@ -6,6 +6,7 @@ import com.termux.terminal.TextStyle
 import dev.openwrtmanager.app.ssh.SshShell
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -61,7 +62,22 @@ class TerminalSessionModel(
     private val _state = MutableStateFlow<SessionState>(SessionState.Open)
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
+    /**
+     * Everything that touches the network goes through here, drained by one background writer:
+     * Android forbids network use on the main thread, and one writer keeps the bytes in order.
+     */
+    private val outbox = Channel<() -> Unit>(Channel.UNLIMITED)
+
     init {
+        scope.launch(Dispatchers.IO) {
+            for (job in outbox) {
+                try {
+                    job()
+                } catch (e: Exception) {
+                    _state.value = SessionState.Closed("The connection was lost.")
+                }
+            }
+        }
         scope.launch(Dispatchers.IO) {
             val buffer = ByteArray(8192)
             val reason = try {
@@ -79,16 +95,16 @@ class TerminalSessionModel(
         }
     }
 
-    /** Raw bytes to the device; dropped once the session is closed. */
+    /** Raw bytes to the device, written in order off the calling thread; dropped once the session is closed. */
     fun send(bytes: ByteArray) {
         if (_state.value != SessionState.Open) return
-        try {
-            synchronized(outLock) {
-                shell.output.write(bytes)
-                shell.output.flush()
+        outbox.trySend {
+            if (_state.value == SessionState.Open) {
+                synchronized(outLock) {
+                    shell.output.write(bytes)
+                    shell.output.flush()
+                }
             }
-        } catch (e: Exception) {
-            _state.value = SessionState.Closed("The connection was lost.")
         }
     }
 
@@ -102,13 +118,15 @@ class TerminalSessionModel(
 
     fun resize(cols: Int, rows: Int) {
         synchronized(lock) { emulator.resize(cols, rows, 1, 1) }
-        runCatching { shell.resize(cols, rows) }
+        outbox.trySend { runCatching { shell.resize(cols, rows) } }
         _screen.value = snapshot()
     }
 
     fun close() {
-        shell.close()
         _state.value = SessionState.Closed("Closed.")
+        outbox.close()
+        // Closing the channel can block on the network too.
+        Thread { runCatching { shell.close() } }.start()
     }
 
     /** The visible screen, or [scrolledBack] lines further up into the scrollback. */

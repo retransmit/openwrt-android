@@ -35,10 +35,15 @@ class TerminalViewModel @Inject constructor(private val opener: ShellOpener) : V
     private var rows = 24
 
     /** Opens the shell once the screen knows how many columns and rows fit. */
+    /** The screen's current size: opens the shell the first time, and resizes it after that. */
     fun start(cols: Int, rows: Int) {
-        this.cols = cols
-        this.rows = rows
-        if (_ui.value == TerminalUi.Idle) open()
+        if (_ui.value == TerminalUi.Idle) {
+            this.cols = cols
+            this.rows = rows
+            open()
+        } else {
+            resize(cols, rows)
+        }
     }
 
     fun resize(cols: Int, rows: Int) {
@@ -60,9 +65,11 @@ class TerminalViewModel @Inject constructor(private val opener: ShellOpener) : V
 
     private fun open() {
         _ui.value = TerminalUi.Connecting
+        val openCols = cols
+        val openRows = rows
         viewModelScope.launch {
             val shell = try {
-                withContext(Dispatchers.IO) { opener.open(cols, rows) }
+                withContext(Dispatchers.IO) { opener.open(openCols, openRows) }
                     ?: return@launch run { _ui.value = TerminalUi.Failed("Connect to a device on the Home tab first.") }
             } catch (e: CancellationException) {
                 throw e
@@ -70,7 +77,10 @@ class TerminalViewModel @Inject constructor(private val opener: ShellOpener) : V
                 _ui.value = TerminalUi.Failed("Could not open a shell on the device.")
                 return@launch
             }
-            _ui.value = TerminalUi.Open(TerminalSessionModel(shell, cols, rows, viewModelScope))
+            val session = TerminalSessionModel(shell, openCols, openRows, viewModelScope)
+            // The screen may have changed size while the shell was opening.
+            if (cols != openCols || rows != openRows) session.resize(cols, rows)
+            _ui.value = TerminalUi.Open(session)
         }
     }
 

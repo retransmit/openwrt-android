@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -70,6 +71,7 @@ import dev.openwrtmanager.app.terminal.StyledRow
 import dev.openwrtmanager.app.terminal.TerminalKey
 import dev.openwrtmanager.app.terminal.TerminalSessionModel
 import dev.openwrtmanager.app.terminal.ctrlByte
+import dev.openwrtmanager.app.terminal.diffInput
 
 private val TERMINAL_BACKGROUND = Color(0xFF000000)
 private val CELL_STYLE = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
@@ -86,7 +88,8 @@ fun TerminalScreen(onBack: () -> Unit, viewModel: TerminalViewModel = hiltViewMo
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
+        // The scaffold's padding already covers the navigation bar, so the keyboard's padding must not add it again.
+        Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "Commands here run directly on the device. The undo timer does not cover them.",
@@ -113,10 +116,7 @@ private fun TerminalArea(viewModel: TerminalViewModel, ui: TerminalUi) {
         val heightPx = with(density) { (maxHeight - keyRowHeight).toPx() }
         val cols = (widthPx / cell.width).toInt().coerceAtLeast(20)
         val rows = (heightPx / cell.height).toInt().coerceAtLeast(5)
-        LaunchedEffect(cols, rows) {
-            viewModel.start(cols, rows)
-            viewModel.resize(cols, rows)
-        }
+        LaunchedEffect(cols, rows) { viewModel.start(cols, rows) }
         when (ui) {
             TerminalUi.Idle, TerminalUi.Connecting -> LinearProgressIndicator(Modifier.fillMaxWidth())
             is TerminalUi.Failed -> Notice(ui.message, "Try again", viewModel::reconnect)
@@ -172,9 +172,9 @@ private fun Session(session: TerminalSessionModel, cellWidth: Int, cellHeight: I
                         .background(Color(0x99FFFFFF)),
                 )
             }
-            KeyboardInput(focus) { typed, backspace ->
+            KeyboardInput(focus) { typed, backspaces ->
                 scrolledBack = 0
-                if (backspace) session.key(TerminalKey.BACKSPACE, ctrl = false)
+                repeat(backspaces) { session.key(TerminalKey.BACKSPACE, ctrl = false) }
                 if (typed.isNotEmpty()) {
                     if (ctrl) {
                         ctrlByte(typed.first())?.let { session.send(byteArrayOf(it)) } ?: session.type(typed.take(1))
@@ -223,23 +223,22 @@ private fun RowText(row: StyledRow, cellHeight: Int) {
 }
 
 /**
- * The soft keyboard types into a hidden field that always holds one space: anything after it was
- * typed, and the space disappearing means backspace, which an empty field could not report.
+ * The soft keyboard types into a hidden field that starts with one space, so deleting with nothing
+ * typed still shows up as a change. Each change is compared with the last one and only the
+ * difference is sent, since a keyboard composing a word resends the whole word as it grows. The
+ * field goes back to the single space only after a line ends and nothing is being composed.
  */
 @Composable
-private fun KeyboardInput(focus: FocusRequester, onInput: (typed: String, backspace: Boolean) -> Unit) {
+private fun KeyboardInput(focus: FocusRequester, onInput: (typed: String, backspaces: Int) -> Unit) {
     val sentinel = remember { TextFieldValue(" ", TextRange(1)) }
     var value by remember { mutableStateOf(sentinel) }
     BasicTextField(
         value = value,
         onValueChange = { next ->
-            val text = next.text
-            when {
-                text.isEmpty() -> onInput("", true)
-                text.startsWith(" ") -> onInput(text.substring(1), false)
-                else -> onInput(text, true)
-            }
-            value = sentinel
+            val diff = diffInput(value.text, next.text)
+            if (diff.backspaces > 0 || diff.typed.isNotEmpty()) onInput(diff.typed, diff.backspaces)
+            val lineDone = next.text.contains('\n') || next.text.isEmpty() || next.text.length > 256
+            value = if (next.composition == null && lineDone) sentinel else next
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
         modifier = Modifier.size(1.dp).focusRequester(focus),

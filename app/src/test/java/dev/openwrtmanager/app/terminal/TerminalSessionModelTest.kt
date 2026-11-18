@@ -97,6 +97,37 @@ class TerminalSessionModelTest {
     }
 
     @Test
+    fun writes_and_resizes_happen_off_the_calling_thread() = runBlocking<Unit> {
+        // Android forbids network use on the main thread; the screen calls these from it.
+        val threads = mutableListOf<String>()
+        val shell = object : SshShell by FakeShell() {
+            override val output = object : java.io.OutputStream() {
+                override fun write(b: Int) {
+                    synchronized(threads) { threads += Thread.currentThread().name }
+                }
+            }
+            override fun resize(cols: Int, rows: Int) {
+                synchronized(threads) { threads += Thread.currentThread().name }
+            }
+        }
+        val model = TerminalSessionModel(shell, 20, 3, scope)
+        val caller = Thread.currentThread().name
+        model.type("a")
+        model.resize(30, 5)
+        model.type("b")
+        waitFor("written") { synchronized(threads) { threads.size >= 3 } }
+        assertTrue(synchronized(threads) { threads.none { it == caller } })
+    }
+
+    @Test
+    fun writes_keep_their_order() = runBlocking<Unit> {
+        val shell = FakeShell()
+        val model = TerminalSessionModel(shell, 20, 3, scope)
+        for (c in "hello world") model.type(c.toString())
+        waitFor("all written") { shell.sent.toString() == "hello world" }
+    }
+
+    @Test
     fun keys_follow_cursor_mode() {
         assertArrayEquals("\u001b[A".toByteArray(), keyBytes(TerminalKey.UP, ctrl = false, applicationCursor = false))
         assertArrayEquals("\u001bOA".toByteArray(), keyBytes(TerminalKey.UP, ctrl = false, applicationCursor = true))
