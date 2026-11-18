@@ -1,0 +1,4 @@
+<resources>
+    <!-- Dark window behind the app in dark mode, so no white shows while screens change or start. -->
+    <style name="Theme.OpenWrtManager" parent="android:Theme.Material.NoActionBar" />
+</resources>

@@ -1,5 +1,11 @@
 package dev.openwrtmanager.app.ui.nav
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -60,6 +66,9 @@ private const val NO_ID = -1L
 
 private fun editRoute(id: Long?) = "device/edit?id=${id ?: NO_ID}"
 
+/** How long moving between screens takes. */
+private const val NAV_MS = 260
+
 private enum class Tab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
     NETWORK("Network", Icons.Default.Lan),
@@ -71,7 +80,17 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 fun AppNav() {
     val nav = rememberNavController()
-    NavHost(navController = nav, startDestination = ROUTE_MAIN) {
+    // Screens slide a short way and fade over the theme's own background, so nothing behind the
+    // app (such as a white window) shows through while one screen replaces another.
+    NavHost(
+        navController = nav,
+        startDestination = ROUTE_MAIN,
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        enterTransition = { slideInHorizontally(tween(NAV_MS)) { it / 10 } + fadeIn(tween(NAV_MS)) },
+        exitTransition = { slideOutHorizontally(tween(NAV_MS)) { -it / 10 } + fadeOut(tween(NAV_MS / 2)) },
+        popEnterTransition = { slideInHorizontally(tween(NAV_MS)) { -it / 10 } + fadeIn(tween(NAV_MS)) },
+        popExitTransition = { slideOutHorizontally(tween(NAV_MS)) { it / 10 } + fadeOut(tween(NAV_MS / 2)) },
+    ) {
         composable(ROUTE_MAIN) {
             MainTabs(
                 onManageDevices = { nav.navigate(ROUTE_DEVICES) },
