@@ -8,6 +8,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
+import dev.openwrtmanager.app.ui.theme.LocalExtraColors
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -180,7 +183,19 @@ private fun MainTabs(
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var switcherOpen by rememberSaveable { mutableStateOf(false) }
 
+    val scheme = MaterialTheme.colorScheme
+    // The selected tab sits in a soft pill of the accent colour; the rest stay muted.
+    val itemColors = NavigationSuiteDefaults.itemColors(
+        navigationBarItemColors = NavigationBarItemDefaults.colors(
+            indicatorColor = LocalExtraColors.current.accentTint,
+            selectedIconColor = scheme.primary,
+            selectedTextColor = scheme.onSurface,
+            unselectedIconColor = scheme.onSurfaceVariant,
+            unselectedTextColor = scheme.onSurfaceVariant,
+        ),
+    )
     NavigationSuiteScaffold(
+        navigationSuiteColors = NavigationSuiteDefaults.colors(navigationBarContainerColor = scheme.surfaceContainerLow),
         navigationSuiteItems = {
             Tab.entries.forEach { entry ->
                 item(
@@ -188,6 +203,7 @@ private fun MainTabs(
                     onClick = { tab = entry },
                     icon = { Icon(entry.icon, contentDescription = null) },
                     label = { Text(entry.label) },
+                    colors = itemColors,
                 )
             }
         },
