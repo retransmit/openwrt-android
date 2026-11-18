@@ -13,3 +13,12 @@ fun diffInput(old: String, new: String): InputDiff {
     while (shared < limit && old[shared] == new[shared]) shared++
     return InputDiff(old.length - shared, new.substring(shared))
 }
+
+/**
+ * Whether the keyboard's field should go back to empty. Clearing mid-word would make the keyboard
+ * resend the word, so it waits for a finished line. After a control key it clears at once: the
+ * letter typed with Ctrl went out as a control byte, and leaving it in the field would make a later
+ * backspace delete a character the shell never had.
+ */
+fun shouldClearField(text: String, composing: Boolean, controlSent: Boolean): Boolean =
+    controlSent || (!composing && (text.contains('\n') || text.isEmpty() || text.length > 256))

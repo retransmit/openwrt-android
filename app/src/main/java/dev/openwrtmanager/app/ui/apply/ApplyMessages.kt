@@ -24,7 +24,7 @@ fun outcomeMessage(outcome: ApplyOutcome): OutcomeMessage = when (outcome) {
     )
 }
 
-private val SECRET_LINE = Regex("""(\.[A-Za-z0-9_]*(?:key|pass|secret|psk)[A-Za-z0-9_]*=)(.*)""", RegexOption.IGNORE_CASE)
+private val SECRET_LINE = Regex("""(\.[A-Za-z0-9_]*(?:key|pass|secret|psk)[A-Za-z0-9_]*\+?=)(.*)""", RegexOption.IGNORE_CASE)
 
 /** Hides Wi-Fi passwords in `uci changes` text before it is shown on screen. */
 fun maskSecrets(text: String): String = text.lineSequence().joinToString("\n") { line ->

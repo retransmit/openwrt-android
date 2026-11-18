@@ -95,6 +95,7 @@ class EditorViewModel @Inject constructor(private val gateways: AdminGatewayProv
             EditorProblem.SECTION_GONE -> "A section you edited no longer exists on the device. Reload and try again."
             EditorProblem.SECTION_EXISTS -> "A section with that name already exists."
             EditorProblem.LINE_BREAK -> "Values cannot contain line breaks."
+            EditorProblem.EMPTY_VALUE -> "A value cannot be empty. To clear an option, remove it instead."
             EditorProblem.NOTHING_TO_DO -> "These edits change nothing."
         }
     }

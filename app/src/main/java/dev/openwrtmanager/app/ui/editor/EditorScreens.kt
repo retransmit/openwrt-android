@@ -46,6 +46,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openwrtmanager.app.editor.EditorEdit
 import dev.openwrtmanager.app.editor.ItemState
+import dev.openwrtmanager.app.editor.isSecretOption
 import dev.openwrtmanager.app.editor.OptionView
 import dev.openwrtmanager.app.editor.SectionView
 import dev.openwrtmanager.app.editor.stagedView
@@ -223,12 +224,14 @@ private fun SectionCard(
 
 @Composable
 private fun OptionRow(option: OptionView, enabled: Boolean, onClick: () -> Unit) {
+    // Passwords and keys stay hidden in the list; opening the option shows the value to edit it.
+    fun shown(value: String?) = if (isSecretOption(option.option)) "(hidden)" else value
     val text = when (option.state) {
-        ItemState.SAME -> option.new
-        ItemState.CHANGED -> "${option.old} → ${option.new}"
-        ItemState.ADDED -> "${option.new} (new)"
-        ItemState.REMOVED -> "${option.old} (removed)"
-    }
+        ItemState.SAME -> shown(option.new)
+        ItemState.CHANGED -> if (isSecretOption(option.option)) "(hidden, changed)" else "${option.old} → ${option.new}"
+        ItemState.ADDED -> "${shown(option.new)} (new)"
+        ItemState.REMOVED -> "${shown(option.old)} (removed)"
+    }.orEmpty()
     val color = when (option.state) {
         ItemState.SAME -> MaterialTheme.colorScheme.onSurface
         ItemState.REMOVED -> MaterialTheme.colorScheme.error
@@ -274,7 +277,8 @@ private fun OptionDialog(target: OptionTarget, onDismiss: () -> Unit, onRemove: 
                 )
             }
         },
-        confirmButton = { TextButton(enabled = option.isNotEmpty(), onClick = { onSave(option, value, isList) }) { Text("Stage") } },
+        // An empty single value would make uci delete the option; Remove says that honestly.
+        confirmButton = { TextButton(enabled = option.isNotEmpty() && (isList || value.isNotEmpty()), onClick = { onSave(option, value, isList) }) { Text("Stage") } },
         dismissButton = {
             Row {
                 if (target.option != null) TextButton(onClick = onRemove) { Text("Remove") }

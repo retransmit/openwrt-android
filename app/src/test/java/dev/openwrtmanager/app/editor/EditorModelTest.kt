@@ -106,4 +106,34 @@ class EditorModelTest {
         assertEquals(listOf("dhcp", "network", "system"), parseConfigs("""{"configs":["system","dhcp","network"]}"""))
         assertEquals(emptyList<String>(), parseConfigs("nope"))
     }
+
+    @Test
+    fun configs_the_apply_step_cannot_take_are_left_out() {
+        assertEquals(listOf("network"), parseConfigs("""{"configs":["network","MyConfig"]}"""))
+    }
+
+    @Test
+    fun an_empty_value_is_refused() {
+        // uci treats setting an empty value as a delete, which the review would not say.
+        assertEquals(Planned.Problem(EditorProblem.EMPTY_VALUE), planEdits(system, listOf(EditorEdit.SetOption("cfg01e48a", "hostname", ""))))
+        assertEquals(Planned.Problem(EditorProblem.EMPTY_VALUE), planEdits(system, listOf(EditorEdit.SetOption("ntp", "new_one", ""))))
+    }
+
+    @Test
+    fun removing_a_section_says_which_one() {
+        val firewall = UciConfig(
+            "firewall",
+            listOf(
+                UciSection("cfg0a92bd", "rule", true, 0, mapOf("name" to "Allow-SSH", "dest_port" to "22"), emptyMap()),
+                UciSection("cfg0b11aa", "include", true, 1, mapOf("path" to "/etc/x.nft"), emptyMap()),
+            ),
+        )
+        val planned = planEdits(firewall, listOf(EditorEdit.DeleteSection("cfg0a92bd"), EditorEdit.DeleteSection("cfg0b11aa"))) as Planned.Ready
+        assertEquals(
+            listOf("Remove rule 'Allow-SSH' (cfg0a92bd)", "Remove include section cfg0b11aa"),
+            planned.change.summary,
+        )
+        val added = planEdits(system, listOf(EditorEdit.AddSection("t1", "timeserver"), EditorEdit.DeleteSection("t1"))) as Planned.Ready
+        assertEquals("a section added in the same change", "Remove timeserver section t1", added.change.summary.last())
+    }
 }

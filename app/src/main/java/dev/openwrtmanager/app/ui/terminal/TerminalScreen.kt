@@ -72,6 +72,7 @@ import dev.openwrtmanager.app.terminal.TerminalKey
 import dev.openwrtmanager.app.terminal.TerminalSessionModel
 import dev.openwrtmanager.app.terminal.ctrlByte
 import dev.openwrtmanager.app.terminal.diffInput
+import dev.openwrtmanager.app.terminal.shouldClearField
 
 private val TERMINAL_BACKGROUND = Color(0xFF000000)
 private val CELL_STYLE = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
@@ -175,14 +176,14 @@ private fun Session(session: TerminalSessionModel, cellWidth: Int, cellHeight: I
             KeyboardInput(focus) { typed, backspaces ->
                 scrolledBack = 0
                 repeat(backspaces) { session.key(TerminalKey.BACKSPACE, ctrl = false) }
-                if (typed.isNotEmpty()) {
-                    if (ctrl) {
-                        ctrlByte(typed.first())?.let { session.send(byteArrayOf(it)) } ?: session.type(typed.take(1))
-                        if (typed.length > 1) session.type(typed.drop(1))
-                        ctrl = false
-                    } else {
-                        session.type(typed)
-                    }
+                // Returns whether a control byte went out, so the keyboard's field is cleared.
+                if (typed.isNotEmpty() && ctrl) {
+                    sendWithCtrl(session, typed)
+                    ctrl = false
+                    true
+                } else {
+                    if (typed.isNotEmpty()) session.type(typed)
+                    false
                 }
             }
             if (state is SessionState.Closed) {
@@ -196,10 +197,19 @@ private fun Session(session: TerminalSessionModel, cellWidth: Int, cellHeight: I
                     session.key(key, ctrl)
                     ctrl = false
                 }
-                text != null -> session.type(text)
+                text != null -> {
+                    if (ctrl) sendWithCtrl(session, text) else session.type(text)
+                    ctrl = false
+                }
             }
         }
     }
+}
+
+/** The first character with Ctrl held (as a control byte when it has one), the rest as typed. */
+private fun sendWithCtrl(session: TerminalSessionModel, text: String) {
+    ctrlByte(text.first())?.let { session.send(byteArrayOf(it)) } ?: session.type(text.take(1))
+    if (text.length > 1) session.type(text.drop(1))
 }
 
 @Composable
@@ -229,16 +239,15 @@ private fun RowText(row: StyledRow, cellHeight: Int) {
  * field goes back to the single space only after a line ends and nothing is being composed.
  */
 @Composable
-private fun KeyboardInput(focus: FocusRequester, onInput: (typed: String, backspaces: Int) -> Unit) {
+private fun KeyboardInput(focus: FocusRequester, onInput: (typed: String, backspaces: Int) -> Boolean) {
     val sentinel = remember { TextFieldValue(" ", TextRange(1)) }
     var value by remember { mutableStateOf(sentinel) }
     BasicTextField(
         value = value,
         onValueChange = { next ->
             val diff = diffInput(value.text, next.text)
-            if (diff.backspaces > 0 || diff.typed.isNotEmpty()) onInput(diff.typed, diff.backspaces)
-            val lineDone = next.text.contains('\n') || next.text.isEmpty() || next.text.length > 256
-            value = if (next.composition == null && lineDone) sentinel else next
+            val controlSent = (diff.backspaces > 0 || diff.typed.isNotEmpty()) && onInput(diff.typed, diff.backspaces)
+            value = if (shouldClearField(next.text, next.composition != null, controlSent)) sentinel else next
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
         modifier = Modifier.size(1.dp).focusRequester(focus),
