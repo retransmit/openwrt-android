@@ -18,7 +18,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.ui.unit.sp
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.MonoText
+import dev.openwrtmanager.app.ui.kit.SectionCard
+import dev.openwrtmanager.app.ui.kit.TagChip
+import dev.openwrtmanager.app.ui.theme.MonoFamily
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -133,16 +138,15 @@ fun PackagesScreen(onBack: () -> Unit, viewModel: PackagesViewModel = hiltViewMo
 private fun OutputCard(output: String, onClose: () -> Unit) {
     val scroll = rememberScrollState()
     LaunchedEffect(output) { scroll.scrollTo(scroll.maxValue) }
-    ElevatedCard(Modifier.fillMaxWidth().padding(16.dp)) {
-        Column(Modifier.padding(12.dp)) {
-            Text(
-                output.ifBlank { "(no output)" },
-                Modifier.heightIn(max = 180.dp).verticalScroll(scroll),
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-            )
-            TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) { Text("Close") }
-        }
+    SectionCard(Modifier.padding(16.dp), label = "Output") {
+        Text(
+            output.ifBlank { "(no output)" },
+            Modifier.heightIn(max = 180.dp).verticalScroll(scroll),
+            fontFamily = MonoFamily,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+        )
+        TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) { Text("Close") }
     }
 }
 
@@ -150,18 +154,18 @@ private fun OutputCard(output: String, onClose: () -> Unit) {
 private fun PackageList(packages: List<Package>, action: String, onAction: (Package) -> Unit) {
     LazyColumn {
         items(packages, key = { it.name + " " + it.version }) { pkg ->
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(pkg.name, style = MaterialTheme.typography.bodyLarge)
-                    Text(pkg.version, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    MonoText(pkg.name, size = 14.sp)
+                    MonoText(pkg.version, color = MaterialTheme.colorScheme.onSurfaceVariant, size = 11.sp)
                 }
                 when {
-                    action == "Install" && pkg.installed -> Text("Installed", style = MaterialTheme.typography.labelMedium)
-                    action == "Remove" && !removalAllowed(pkg.name) -> Text("Needed", style = MaterialTheme.typography.labelMedium)
+                    action == "Install" && pkg.installed -> TagChip("Installed", tone = ChipTone.OK)
+                    action == "Remove" && !removalAllowed(pkg.name) -> TagChip("Needed")
                     else -> TextButton(onClick = { onAction(pkg) }) { Text(action) }
                 }
             }
-            HorizontalDivider()
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }
@@ -214,16 +218,20 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
     Screen("Backup", onBack) { modifier ->
         Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (ui.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            Text("Save the device's settings to this phone, or put back settings saved earlier.", style = MaterialTheme.typography.bodyMedium)
-            Button(enabled = !ui.busy && ui.hostname != null, onClick = viewModel::download, modifier = Modifier.fillMaxWidth()) { Text("Download backup") }
-            OutlinedButton(enabled = !ui.busy && ui.hostname != null, onClick = { opener.launch(arrayOf("application/gzip", "application/x-gzip", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Restore from a backup")
+            SectionCard(label = "Save") {
+                Text("Save the device's settings to this phone.", style = MaterialTheme.typography.bodyMedium)
+                Button(enabled = !ui.busy && ui.hostname != null, onClick = viewModel::download, modifier = Modifier.fillMaxWidth()) { Text("Download backup") }
             }
-            Text(
-                "Restoring replaces every setting on the device with the ones in the file, including its root password and SSH keys, and reboots it. It cannot be undone.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            SectionCard(label = "Restore") {
+                Text(
+                    "Restoring replaces every setting on the device with the ones in the file, including its root password and SSH keys, and reboots it. It cannot be undone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(enabled = !ui.busy && ui.hostname != null, onClick = { opener.launch(arrayOf("application/gzip", "application/x-gzip", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Restore from a backup")
+                }
+            }
         }
     }
     ui.pendingRestore?.let { pending ->

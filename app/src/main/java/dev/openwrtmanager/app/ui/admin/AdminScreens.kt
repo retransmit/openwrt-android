@@ -19,7 +19,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Surface
+import androidx.compose.ui.unit.sp
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.Label
+import dev.openwrtmanager.app.ui.kit.ListCard
+import dev.openwrtmanager.app.ui.kit.ListRow
+import dev.openwrtmanager.app.ui.kit.LiveMarker
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.TagChip
+import dev.openwrtmanager.app.ui.theme.MonoFamily
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -109,20 +125,35 @@ fun ServicesScreen(onBack: () -> Unit, viewModel: ServicesViewModel = hiltViewMo
             ServicesUi.Offline -> Text("Connect to a device on the Home tab first.", modifier.padding(16.dp))
             ServicesUi.Failed -> Text("Could not read the services.", modifier.padding(16.dp))
             is ServicesUi.Ready -> {
-                LazyColumn(modifier) {
-                    items(state.services, key = { it.name }) { service ->
-                        Column(Modifier.fillMaxWidth().clickable { open = service }.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            Text(service.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                listOf(
-                                    when (service.running) { true -> "Running"; false -> "Stopped"; null -> "No background process" },
-                                    if (service.enabled) "starts at boot" else "does not start at boot",
-                                ).joinToString(", "),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                LazyColumn(modifier, contentPadding = PaddingValues(16.dp)) {
+                    item { Label("Services · ${state.services.size}", Modifier.padding(start = 4.dp, bottom = 6.dp)) }
+                    itemsIndexed(state.services, key = { _, it -> it.name }) { index, service ->
+                        val first = index == 0
+                        val last = index == state.services.lastIndex
+                        // One outlined card drawn row by row, so the list stays lazy.
+                        val shape = RoundedCornerShape(
+                            topStart = if (first) 18.dp else 0.dp, topEnd = if (first) 18.dp else 0.dp,
+                            bottomStart = if (last) 18.dp else 0.dp, bottomEnd = if (last) 18.dp else 0.dp,
+                        )
+                        Surface(
+                            shape = shape,
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth().offset(y = (-index).dp),
+                        ) {
+                            ListRow(
+                                service.name,
+                                detail = if (service.enabled) "starts at boot" else "does not start at boot",
+                                onClick = { open = service },
+                                trailing = {
+                                    when (service.running) {
+                                        true -> TagChip("Running", tone = ChipTone.OK)
+                                        false -> TagChip("Stopped")
+                                        null -> TagChip("No process")
+                                    }
+                                },
                             )
                         }
-                        HorizontalDivider()
                     }
                 }
                 MessageDialog(state.message, viewModel::clearMessage)
@@ -173,7 +204,7 @@ fun LogsScreen(onBack: () -> Unit, viewModel: LogsViewModel = hiltViewModel()) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 FilterChip(selected = ui.kind == LogKind.SYSTEM, onClick = { viewModel.setKind(LogKind.SYSTEM) }, label = { Text("System") })
                 FilterChip(selected = ui.kind == LogKind.KERNEL, onClick = { viewModel.setKind(LogKind.KERNEL) }, label = { Text("Kernel") })
-                Text("Follow", Modifier.padding(start = 8.dp))
+                if (ui.following) LiveMarker(Modifier.padding(start = 8.dp)) else Text("Follow", Modifier.padding(start = 8.dp))
                 Switch(checked = ui.following, onCheckedChange = viewModel::setFollowing)
             }
             OutlinedTextField(ui.query, viewModel::setQuery, label = { Text("Filter") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -181,9 +212,16 @@ fun LogsScreen(onBack: () -> Unit, viewModel: LogsViewModel = hiltViewModel()) {
                 ui.offline -> Text("Connect to a device on the Home tab first.")
                 ui.failed && ui.lines.isEmpty() -> Text("Could not read the log.")
             }
-            LazyColumn(state = list, modifier = Modifier.fillMaxWidth().weight(1f).horizontalScroll(rememberScrollState())) {
-                items(visible) { line ->
-                    Text(line, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, softWrap = false)
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 12.dp),
+            ) {
+                LazyColumn(state = list, modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(10.dp)) {
+                    items(visible) { line ->
+                        Text(line, fontFamily = MonoFamily, fontSize = 11.sp, lineHeight = 15.sp, softWrap = false)
+                    }
                 }
             }
         }
@@ -208,23 +246,26 @@ fun SystemScreen(onBack: () -> Unit, viewModel: SystemViewModel = hiltViewModel(
             SystemUi.Failed -> Text("Could not read the device's settings.", modifier.padding(16.dp))
             is SystemUi.Ready -> {
                 Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ElevatedCard(Modifier.fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth().clickable { dialog = "hostname" }.padding(16.dp)) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Device name", style = MaterialTheme.typography.labelMedium)
-                                Text(state.config.hostname, style = MaterialTheme.typography.bodyLarge)
-                            }
-                            Text("Change", color = MaterialTheme.colorScheme.primary)
-                        }
-                        HorizontalDivider()
-                        Row(Modifier.fillMaxWidth().clickable { dialog = "zone" }.padding(16.dp)) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Time zone", style = MaterialTheme.typography.labelMedium)
-                                Text(state.config.zonename ?: state.config.timezone ?: "Not set", style = MaterialTheme.typography.bodyLarge)
-                            }
-                            Text("Change", color = MaterialTheme.colorScheme.primary)
-                        }
+                    ListCard(label = "Device") {
+                        ListRow(
+                            "Device name",
+                            icon = Icons.Default.Dns,
+                            detail = state.config.hostname,
+                            monoDetail = true,
+                            onClick = { dialog = "hostname" },
+                            trailing = { Text("Change", color = MaterialTheme.colorScheme.primary) },
+                        )
+                        RowDivider()
+                        ListRow(
+                            "Time zone",
+                            icon = Icons.Default.Schedule,
+                            detail = state.config.zonename ?: state.config.timezone ?: "Not set",
+                            monoDetail = true,
+                            onClick = { dialog = "zone" },
+                            trailing = { Text("Change", color = MaterialTheme.colorScheme.primary) },
+                        )
                     }
+                    Label("Access and power", Modifier.padding(start = 4.dp, top = 8.dp))
                     OutlinedButton(onClick = { dialog = "password" }, modifier = Modifier.fillMaxWidth()) { Text("Change root password") }
                     Button(onClick = { dialog = "reboot" }, modifier = Modifier.fillMaxWidth()) { Text("Reboot") }
                 }
