@@ -125,21 +125,15 @@ fun ServicesScreen(onBack: () -> Unit, viewModel: ServicesViewModel = hiltViewMo
             ServicesUi.Offline -> Text("Connect to a device on the Home tab first.", modifier.padding(16.dp))
             ServicesUi.Failed -> Text("Could not read the services.", modifier.padding(16.dp))
             is ServicesUi.Ready -> {
-                LazyColumn(modifier, contentPadding = PaddingValues(16.dp)) {
+                LazyColumn(modifier, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     item { Label("Services · ${state.services.size}", Modifier.padding(start = 4.dp, bottom = 6.dp)) }
-                    itemsIndexed(state.services, key = { _, it -> it.name }) { index, service ->
-                        val first = index == 0
-                        val last = index == state.services.lastIndex
-                        // One outlined card drawn row by row, so the list stays lazy.
-                        val shape = RoundedCornerShape(
-                            topStart = if (first) 18.dp else 0.dp, topEnd = if (first) 18.dp else 0.dp,
-                            bottomStart = if (last) 18.dp else 0.dp, bottomEnd = if (last) 18.dp else 0.dp,
-                        )
+                    items(state.services, key = { it.name }) { service ->
+                        // A small card per service keeps the list lazy without stitching one card across rows.
                         Surface(
-                            shape = shape,
+                            shape = MaterialTheme.shapes.medium,
                             color = MaterialTheme.colorScheme.surfaceContainerLow,
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            modifier = Modifier.fillMaxWidth().offset(y = (-index).dp),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             ListRow(
                                 service.name,

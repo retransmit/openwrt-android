@@ -1,6 +1,10 @@
 package dev.openwrtmanager.app.ui.kit
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,14 +42,19 @@ fun Readout(
     size: TextUnit = 18.sp,
 ) {
     Row(modifier, verticalAlignment = Alignment.Bottom) {
-        Text(
+        // Steps the size down rather than clipping when large system text leaves too little room.
+        BasicText(
             value,
-            fontFamily = MonoFamily,
-            fontWeight = FontWeight.Medium,
-            fontSize = size,
-            color = color,
+            modifier = Modifier.weight(1f, fill = false),
+            style = TextStyle(
+                fontFamily = MonoFamily,
+                fontWeight = FontWeight.Medium,
+                fontSize = size,
+                color = if (color == Color.Unspecified) LocalContentColor.current else color,
+            ),
             maxLines = 1,
             softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = size),
         )
         if (unit != null) {
             Text(

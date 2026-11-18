@@ -200,9 +200,12 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun sampleRate(router: RouterClient) {
         val device = uplink ?: return
+        // Commands share one connection: a poll that waited behind the slow refresh would time the queue.
+        val clean = !slowInFlight
+        val runsBefore = slowRuns
         val started = time.nowMillis()
         val counters = soft { router.counters(device) } ?: return
-        noteResponse(time.nowMillis() - started)
+        if (clean && !slowInFlight && slowRuns == runsBefore) noteResponse(time.nowMillis() - started)
         val rate = sampler.sample(counters, time.nowMillis()) ?: return
         _ui.update { it.copy(rate = rate, history = (it.history + rate).takeLast(HISTORY_SIZE)) }
     }
@@ -211,19 +214,35 @@ class HomeViewModel @Inject constructor(
         if (_ui.value.status is HomeStatus.Online) _ui.update { it.copy(responseMs = ms) }
     }
 
+    private var slowInFlight = false
+    private var slowRuns = 0
+
     private suspend fun refreshSlow(router: RouterClient) {
+        slowInFlight = true
+        slowRuns++
+        try {
+            refreshSlowNow(router)
+        } finally {
+            slowInFlight = false
+        }
+    }
+
+    private suspend fun refreshSlowNow(router: RouterClient) {
         val system = soft { router.systemInfo() }
         val wifi = soft { router.wifiNetworks() }
         val started = time.nowMillis()
-        val leases = soft { router.leaseCount() }
-        // Without an uplink there is no fast poll to time; this is one command, so it stands in for it.
-        if (leases != null && uplink == null) noteResponse(time.nowMillis() - started)
+        var answered = false
+        // Null also means "no lease file", as on an access point without DHCP; the router still answered.
+        val leases = soft { router.leaseCount().also { answered = true } }
+        val leaseMs = time.nowMillis() - started
         // A failed read keeps the previous answer: only a successful one may say there is no uplink.
         val device = try {
             router.uplinkDevice()
         } catch (e: RouterError) {
             uplink
         }
+        // Without an uplink there is no fast poll to time; the lease read is one command, so it stands in for it.
+        if (answered && device == null) noteResponse(leaseMs)
         if (device != uplink) {
             uplink = device
             sampler.reset()
