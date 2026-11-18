@@ -18,10 +18,16 @@ sealed interface EditorEdit {
     data class DeleteSection(val section: String) : EditorEdit
 }
 
-enum class EditorProblem { BAD_NAME, SECTION_GONE, SECTION_EXISTS, LINE_BREAK, NOTHING_TO_DO }
+enum class EditorProblem { BAD_NAME, SECTION_GONE, SECTION_EXISTS, LINE_BREAK, EMPTY_VALUE, NOTHING_TO_DO }
 
 private val NAME = Regex("[A-Za-z0-9_]+")
+
+/** Config file names the apply step accepts. */
+private val CONFIG_NAME = Regex("[a-z0-9_]+")
 private val SECRET = Regex("key|pass|secret|psk", RegexOption.IGNORE_CASE)
+
+/** Options whose values are passwords or keys, kept off the screen unless the user opens them. */
+fun isSecretOption(option: String) = SECRET.containsMatchIn(option)
 
 private fun hasLineBreak(value: String) = value.any { it == '\n' || it == '\r' }
 
@@ -37,6 +43,7 @@ fun planEdits(config: UciConfig, edits: List<EditorEdit>): Planned<EditorProblem
         .toMutableMap()
     val batch = UciBatch()
     val summary = mutableListOf<String>()
+    val added = mutableMapOf<String, String>()
 
     fun shown(option: String, value: String) = if (SECRET.containsMatchIn(option)) "a new value" else value
 
@@ -46,6 +53,8 @@ fun planEdits(config: UciConfig, edits: List<EditorEdit>): Planned<EditorProblem
                 if (!NAME.matches(edit.section) || !NAME.matches(edit.option)) return Planned.Problem(EditorProblem.BAD_NAME)
                 val existing = options[edit.section] ?: return Planned.Problem(EditorProblem.SECTION_GONE)
                 if (hasLineBreak(edit.value)) return Planned.Problem(EditorProblem.LINE_BREAK)
+                // uci turns an empty value into a delete, which "Set ... to" would hide.
+                if (edit.value.isEmpty()) return Planned.Problem(EditorProblem.EMPTY_VALUE)
                 batch.set(c, edit.section, edit.option, edit.value)
                 existing += edit.option
                 summary += "Set ${edit.section}.${edit.option} to ${shown(edit.option, edit.value)}"
@@ -80,13 +89,14 @@ fun planEdits(config: UciConfig, edits: List<EditorEdit>): Planned<EditorProblem
                 if (edit.name in options) return Planned.Problem(EditorProblem.SECTION_EXISTS)
                 batch.section(c, edit.name, edit.type)
                 options[edit.name] = mutableSetOf()
+                added[edit.name] = edit.type
                 summary += "Add section ${edit.name} (${edit.type})"
             }
             is EditorEdit.DeleteSection -> {
                 if (!NAME.matches(edit.section)) return Planned.Problem(EditorProblem.BAD_NAME)
                 options.remove(edit.section) ?: return Planned.Problem(EditorProblem.SECTION_GONE)
                 batch.delete(c, edit.section)
-                summary += "Remove section ${edit.section}"
+                summary += "Remove ${describeSection(edit.section, config, added)}"
             }
         }
     }
@@ -94,10 +104,21 @@ fun planEdits(config: UciConfig, edits: List<EditorEdit>): Planned<EditorProblem
     return Planned.Ready(ChangeSet("Edit $c", summary, batch, mayDropConnection = true))
 }
 
+/**
+ * A section as the review names it: its type plus its `name` option when it has one, since unnamed
+ * sections such as firewall rules are otherwise only a cfgXXXX id.
+ */
+private fun describeSection(section: String, config: UciConfig, added: Map<String, String>): String {
+    val existing = config.sections.find { it.name == section }
+    val type = added[section] ?: existing?.type ?: return "section $section"
+    val label = existing?.options?.get("name")?.takeIf { added[section] == null && it.isNotBlank() && !hasLineBreak(it) }
+    return if (label != null) "$type '$label' ($section)" else "$type section $section"
+}
+
 /** `ubus call uci configs`, sorted. */
 fun parseConfigs(json: String): List<String> = try {
     Json.parseToJsonElement(json).jsonObject["configs"]?.jsonArray.orEmpty()
-        .mapNotNull { (it as? JsonPrimitive)?.content?.takeIf { name -> NAME.matches(name) } }
+        .mapNotNull { (it as? JsonPrimitive)?.content?.takeIf { name -> CONFIG_NAME.matches(name) } }
         .sorted()
 } catch (e: IllegalArgumentException) {
     emptyList()

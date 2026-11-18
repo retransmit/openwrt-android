@@ -50,4 +50,13 @@ class ApplyMessagesTest {
         for (secret in listOf("AAAA", "BBBB", "CCCC", "DDDD", "EEEE")) assertFalse(secret, shown.contains(secret))
         assertTrue(shown.contains("network.lan.ipaddr='192.168.1.1'"))
     }
+
+    @Test
+    fun secret_list_additions_are_hidden() {
+        // `uci changes` prints list entries as option+='value'.
+        val shown = maskSecrets("wireless.x.psk+='FFFF'\nsystem.ntp.server+='pool.ntp.org'")
+        assertFalse(shown.contains("FFFF"))
+        assertTrue(shown.contains("wireless.x.psk+='(hidden)'"))
+        assertTrue(shown.contains("system.ntp.server+='pool.ntp.org'"))
+    }
 }

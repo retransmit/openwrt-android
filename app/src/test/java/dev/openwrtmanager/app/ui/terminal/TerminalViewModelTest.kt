@@ -70,6 +70,40 @@ class TerminalViewModelTest {
         assertEquals(20, (vm.ui.value as TerminalUi.Open).session.screen.value.rows.size)
     }
 
+    private fun gatedViewModel(gate: java.util.concurrent.CountDownLatch) = TerminalViewModel { cols, rows ->
+        sizes += cols to rows
+        gate.await()
+        FakeShell().also { shells += it }
+    }
+
+    @Test
+    fun a_shell_that_arrives_after_leaving_is_closed() = runBlocking<Unit> {
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val vm = gatedViewModel(gate)
+        vm.start(80, 24)
+        waitFor { sizes.isNotEmpty() }
+        vm.close()
+        gate.countDown()
+        waitFor { shells.size == 1 && !shells.single().isOpen }
+        delay(50)
+        assertEquals("the screen stays closed", TerminalUi.Idle, vm.ui.value)
+    }
+
+    @Test
+    fun a_second_reconnect_while_connecting_is_ignored() = runBlocking<Unit> {
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val vm = gatedViewModel(gate)
+        vm.start(80, 24)
+        waitFor { sizes.isNotEmpty() }
+        vm.reconnect()
+        vm.reconnect()
+        gate.countDown()
+        waitFor { vm.ui.value is TerminalUi.Open }
+        delay(50)
+        assertEquals("one connection only", 1, sizes.size)
+        assertTrue(shells.single().isOpen)
+    }
+
     @Test
     fun disconnect_is_shown_and_input_is_refused() = runBlocking<Unit> {
         val vm = viewModel()

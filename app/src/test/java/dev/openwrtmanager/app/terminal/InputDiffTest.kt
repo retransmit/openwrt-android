@@ -25,6 +25,16 @@ class InputDiffTest {
     }
 
     @Test
+    fun the_field_is_cleared_only_when_safe() {
+        assertEquals("mid-word", false, shouldClearField(" ls", composing = true, controlSent = false))
+        assertEquals("a finished line", true, shouldClearField(" ls\n", composing = false, controlSent = false))
+        assertEquals("still composing the line", false, shouldClearField(" ls\n", composing = true, controlSent = false))
+        // Ctrl+C went out as one control byte, so the "c" left in the field never reached the shell.
+        assertEquals("after a control key", true, shouldClearField(" c", composing = true, controlSent = true))
+        assertEquals("too long", true, shouldClearField(" " + "x".repeat(300), composing = false, controlSent = false))
+    }
+
+    @Test
     fun several_characters_at_once() {
         assertEquals(InputDiff(0, "ls -la"), diffInput(" ", " ls -la"))
     }
