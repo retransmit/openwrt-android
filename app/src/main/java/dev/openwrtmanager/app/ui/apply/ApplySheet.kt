@@ -25,6 +25,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.unit.sp
+import dev.openwrtmanager.app.ui.kit.Readout
+import dev.openwrtmanager.app.ui.theme.LocalExtraColors
+import dev.openwrtmanager.app.ui.theme.MonoFamily
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -90,14 +95,19 @@ private fun Review(state: ApplyUi.Review, onApply: () -> Unit, onCancel: () -> U
         }
     }
     if (state.change.mayDropConnection) {
-        Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium) {
+        val warning = LocalExtraColors.current.warning
+        Surface(
+            color = warning.copy(alpha = 0.12f),
+            shape = MaterialTheme.shapes.medium,
+            border = BorderStroke(1.dp, warning.copy(alpha = 0.5f)),
+        ) {
             Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Icon(Icons.Default.Info, contentDescription = null, tint = warning)
                 Text(
                     "Your phone may lose connection for a few seconds. If the app cannot reach the router again, " +
                         "the router undoes this change by itself after ${SafeApply.DEFAULT_ROLLBACK_SECONDS} seconds.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -119,11 +129,16 @@ private fun Review(state: ApplyUi.Review, onApply: () -> Unit, onCancel: () -> U
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                else -> Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = MaterialTheme.shapes.small) {
+                else -> Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    shape = MaterialTheme.shapes.small,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
                     Text(
                         maskSecrets(state.rawChanges),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        fontFamily = MonoFamily,
                         modifier = Modifier.horizontalScroll(rememberScrollState()).padding(12.dp),
                     )
                 }
@@ -141,7 +156,11 @@ private fun Review(state: ApplyUi.Review, onApply: () -> Unit, onCancel: () -> U
 private fun Working(state: ApplyUi.Working) {
     Text("Applying", style = MaterialTheme.typography.titleLarge)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+        if (state.secondsLeft > 0) {
+            Readout("${state.secondsLeft}", unit = "s", color = MaterialTheme.colorScheme.primary, size = 32.sp)
+        } else {
+            CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+        }
         Column {
             Text(
                 when (state.phase) {

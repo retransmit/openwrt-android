@@ -30,6 +30,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import dev.openwrtmanager.app.ui.theme.LocalExtraColors
+import dev.openwrtmanager.app.ui.theme.MonoFamily
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -91,12 +93,13 @@ fun TerminalScreen(onBack: () -> Unit, viewModel: TerminalViewModel = hiltViewMo
     ) { padding ->
         // The scaffold's padding already covers the navigation bar, so the keyboard's padding must not add it again.
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
-            Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
+            val warning = LocalExtraColors.current.warning
+            Surface(color = warning.copy(alpha = 0.14f), modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "Commands here run directly on the device. The undo timer does not cover them.",
                     Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = warning,
                 )
             }
             Box(Modifier.weight(1f).fillMaxWidth().background(TERMINAL_BACKGROUND)) {
@@ -263,9 +266,21 @@ private fun KeyRow(height: androidx.compose.ui.unit.Dp, ctrl: Boolean, onCtrl: (
         verticalAlignment = Alignment.CenterVertically,
     ) {
         @Composable
-        fun key(label: String, onClick: () -> Unit) = OutlinedButton(onClick = onClick, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp)) { Text(label) }
+        fun key(label: String, held: Boolean = false, onClick: () -> Unit) = OutlinedButton(
+            onClick = onClick,
+            shape = MaterialTheme.shapes.small,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+            colors = if (held) {
+                androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    containerColor = LocalExtraColors.current.accentTint,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                )
+            } else {
+                androidx.compose.material3.ButtonDefaults.outlinedButtonColors()
+            },
+        ) { Text(label, fontFamily = MonoFamily) }
         key("Esc") { onKey(TerminalKey.ESC, null) }
-        if (ctrl) FilledTonalButton(onClick = onCtrl, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp)) { Text("Ctrl") } else key("Ctrl", onCtrl)
+        key("Ctrl", held = ctrl, onClick = onCtrl)
         key("Tab") { onKey(TerminalKey.TAB, null) }
         key("←") { onKey(TerminalKey.LEFT, null) }
         key("↑") { onKey(TerminalKey.UP, null) }
