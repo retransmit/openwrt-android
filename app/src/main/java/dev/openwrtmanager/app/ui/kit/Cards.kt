@@ -116,7 +116,7 @@ fun ListRow(
             Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (detail != null) {
                 if (monoDetail) {
-                    MonoText(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                    MonoText(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
                 } else {
                     Text(
                         detail,

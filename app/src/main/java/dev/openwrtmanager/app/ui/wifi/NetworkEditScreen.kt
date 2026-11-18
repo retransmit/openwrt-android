@@ -18,7 +18,7 @@ import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ElevatedCard
+import dev.openwrtmanager.app.ui.kit.SectionCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -238,9 +238,8 @@ private fun SteeringCard(
     onStart: () -> Unit,
     onInstall: () -> Unit,
 ) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Band steering", style = MaterialTheme.typography.titleMedium)
+    SectionCard(label = "Band steering") {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SwitchRow(
                 title = "Help devices pick the better band",
                 detail = "Uses one name on every band and tells devices about the alternatives.",

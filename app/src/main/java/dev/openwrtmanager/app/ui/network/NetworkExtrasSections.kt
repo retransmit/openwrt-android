@@ -7,7 +7,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.ui.unit.sp
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.Label
+import dev.openwrtmanager.app.ui.kit.ListCard
+import dev.openwrtmanager.app.ui.kit.MonoText
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.TagChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -30,34 +36,31 @@ import dev.openwrtmanager.app.ui.clients.duration
 /** Interfaces, then (after the VLANs) reservations, with their edit dialogs. */
 @Composable
 internal fun InterfacesSection(state: ExtrasUi.Ready, onEditPool: (Pool) -> Unit) {
-    Text("Interfaces", style = MaterialTheme.typography.titleMedium)
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ListCard(label = "Interfaces") {
         state.interfaces.forEachIndexed { index, row ->
-            if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(row.status.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    Text(
-                        if (row.status.up) "Up" else "Down",
-                        color = if (row.status.up) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
+            if (index > 0) RowDivider()
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val s = row.status
-                Text(
-                    listOfNotNull(s.proto.ifEmpty { null }, s.ipv4, s.uptimeSeconds?.let { "up ${duration(it)}" }).joinToString(", "),
-                    style = MaterialTheme.typography.bodyMedium,
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(s.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    TagChip(if (s.up) "Up" else "Down", tone = if (s.up) ChipTone.OK else ChipTone.ERROR)
+                }
+                MonoText(
+                    listOfNotNull(s.proto.ifEmpty { null }, s.ipv4, s.uptimeSeconds?.let { "up ${duration(it)}" }).joinToString(" \u00B7 "),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
                 )
                 if (s.rxBytes != null && s.txBytes != null) {
-                    Text("Received ${bytes(s.rxBytes)}, sent ${bytes(s.txBytes)}", style = MaterialTheme.typography.bodySmall)
+                    MonoText("\u2193 ${bytes(s.rxBytes)}  \u2191 ${bytes(s.txBytes)}", color = MaterialTheme.colorScheme.onSurfaceVariant, size = 11.sp)
                 }
                 row.pool?.let { pool ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "DHCP: ${pool.limit} addresses from .${pool.start}, lease ${pool.leasetime}",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f),
+                        MonoText(
+                            "DHCP ${pool.limit} from .${pool.start} \u00B7 lease ${pool.leasetime}",
+                            Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            size = 11.sp,
+                            maxLines = 2,
                         )
                         TextButton(onClick = { onEditPool(pool) }) { Text("Edit") }
                     }
@@ -69,8 +72,8 @@ internal fun InterfacesSection(state: ExtrasUi.Ready, onEditPool: (Pool) -> Unit
 
 @Composable
 internal fun ReservationsSection(state: ExtrasUi.Ready, onEdit: (Reservation) -> Unit, onRemove: (Reservation) -> Unit) {
-    Text("Address reservations", style = MaterialTheme.typography.titleMedium)
     if (state.reservations.isEmpty()) {
+        Label("Address reservations", Modifier.padding(start = 4.dp))
         Text(
             "None yet. Reserve an address from a device on the Clients tab.",
             style = MaterialTheme.typography.bodyMedium,
@@ -78,17 +81,13 @@ internal fun ReservationsSection(state: ExtrasUi.Ready, onEdit: (Reservation) ->
         )
         return
     }
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ListCard(label = "Address reservations") {
         state.reservations.forEachIndexed { index, reservation ->
-            if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-            Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (index > 0) RowDivider()
+            Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(reservation.name ?: "Unnamed", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "${reservation.ip ?: "no address"}, ${reservation.mac}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    MonoText("${reservation.ip ?: "no address"} \u00B7 ${reservation.mac}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 TextButton(onClick = { onEdit(reservation) }) { Text("Edit") }
                 TextButton(onClick = { onRemove(reservation) }) { Text("Remove") }

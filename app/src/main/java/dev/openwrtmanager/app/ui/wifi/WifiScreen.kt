@@ -58,6 +58,13 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openwrtmanager.app.apply.ChangeSet
 import dev.openwrtmanager.app.domain.Band
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.alpha
+import dev.openwrtmanager.app.ui.kit.ListCard
+import dev.openwrtmanager.app.ui.kit.ListRow
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.TagChip
 import dev.openwrtmanager.app.ui.apply.ApplySheet
 import dev.openwrtmanager.app.ui.apply.ApplyViewModel
 import dev.openwrtmanager.app.wifi.Radio
@@ -115,35 +122,28 @@ fun WifiScreen(
                             }
                         }
                         if (!state.canCreateIsolatedNetworks) {
-                            ElevatedCard(Modifier.fillMaxWidth()) {
-                                ListItem(
-                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                    modifier = Modifier.clickable(onClick = onMirror),
-                                    leadingContent = { Icon(Icons.Default.Groups, contentDescription = null) },
-                                    headlineContent = { Text("Add a network from my router") },
-                                    supportingContent = { Text("Put your router's guest or IoT network on this access point") },
-                                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
+                            ListCard {
+                                ListRow(
+                                    "Add a network from my router",
+                                    icon = Icons.Default.Groups,
+                                    detail = "Put your router's guest or IoT network on this access point",
+                                    onClick = onMirror,
                                 )
                             }
                         }
-                        ElevatedCard(Modifier.fillMaxWidth()) {
-                            val clear = ListItemDefaults.colors(containerColor = Color.Transparent)
-                            ListItem(
-                                colors = clear,
-                                modifier = Modifier.clickable { onWizard(WizardKind.GUEST) },
-                                leadingContent = { Icon(Icons.Default.Groups, contentDescription = null) },
-                                headlineContent = { Text("Create guest network") },
-                                supportingContent = { Text("Internet only, kept away from your own devices") },
-                                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
+                        ListCard(label = "Create") {
+                            ListRow(
+                                "Create guest network",
+                                icon = Icons.Default.Groups,
+                                detail = "Internet only, kept away from your own devices",
+                                onClick = { onWizard(WizardKind.GUEST) },
                             )
-                            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                            ListItem(
-                                colors = clear,
-                                modifier = Modifier.clickable { onWizard(WizardKind.IOT) },
-                                leadingContent = { Icon(Icons.Default.Sensors, contentDescription = null) },
-                                headlineContent = { Text("Create IoT network") },
-                                supportingContent = { Text("A separate network for smart home devices") },
-                                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
+                            RowDivider()
+                            ListRow(
+                                "Create IoT network",
+                                icon = Icons.Default.Sensors,
+                                detail = "A separate network for smart home devices",
+                                onClick = { onWizard(WizardKind.IOT) },
                             )
                         }
                         RadiosCard(state.config, onOpen = { editingRadio = it })
@@ -175,65 +175,58 @@ fun WifiScreen(
 
 @Composable
 private fun NetworksCard(config: WifiConfig, onOpen: (WifiGroup) -> Unit, onQr: (WifiGroup) -> Unit) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(vertical = 8.dp)) {
-            Text("Networks", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp, 8.dp))
-            if (config.groups.isEmpty()) {
-                Text(
-                    "This device is not broadcasting any networks.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp, 8.dp),
-                )
-            }
-            config.groups.forEachIndexed { index, group ->
-                if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                ListItem(
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { onOpen(group) },
-                    leadingContent = {
-                        Icon(if (group.enabled) Icons.Default.Wifi else Icons.Default.WifiOff, contentDescription = null)
-                    },
-                    headlineContent = { Text(group.ssid.ifEmpty { "(no name)" }) },
-                    supportingContent = {
-                        val bands = group.bands.joinToString(" + ") { it.label() }
-                        val security = group.first.security?.label() ?: group.first.rawEncryption
-                        val state = if (group.enabled) "" else " · off"
-                        Text("$bands · $security$state")
-                    },
-                    trailingContent = {
-                        if (group.first.security != null) {
-                            IconButton(onClick = { onQr(group) }) {
-                                Icon(Icons.Default.QrCode2, contentDescription = "Show join code for ${group.ssid}")
-                            }
+    ListCard(label = "Networks · ${config.groups.size}") {
+        if (config.groups.isEmpty()) {
+            Text(
+                "This device is not broadcasting any networks.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(12.dp),
+            )
+        }
+        config.groups.forEachIndexed { index, group ->
+            if (index > 0) RowDivider()
+            val bands = group.bands.joinToString(" + ") { it.label() }
+            val security = group.first.security?.label() ?: group.first.rawEncryption
+            ListRow(
+                group.ssid.ifEmpty { "(no name)" },
+                modifier = Modifier.alpha(if (group.enabled) 1f else 0.5f),
+                icon = if (group.enabled) Icons.Default.Wifi else Icons.Default.WifiOff,
+                detail = "$bands · $security" + if (group.enabled) "" else " · off",
+                monoDetail = true,
+                onClick = { onOpen(group) },
+                trailing = if (group.first.security != null) {
+                    {
+                        IconButton(
+                            onClick = { onQr(group) },
+                            modifier = Modifier.size(34.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small),
+                        ) {
+                            Icon(Icons.Default.QrCode2, contentDescription = "Show join code for ${group.ssid}", modifier = Modifier.size(18.dp))
                         }
-                    },
-                )
-            }
+                    }
+                } else {
+                    null
+                },
+            )
         }
     }
 }
 
 @Composable
 private fun RadiosCard(config: WifiConfig, onOpen: (Radio) -> Unit) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(vertical = 8.dp)) {
-            Text("Radios", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp, 8.dp))
-            config.radios.forEachIndexed { index, radio ->
-                if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                ListItem(
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { onOpen(radio) },
-                    leadingContent = { Icon(Icons.Default.SettingsInputAntenna, contentDescription = null) },
-                    headlineContent = { Text(radio.band.label()) },
-                    supportingContent = {
-                        val channel = if (radio.channel == "auto") "automatic channel" else "channel ${radio.channel}"
-                        val power = radio.txpower?.let { " · $it dBm" }.orEmpty()
-                        Text(if (radio.disabled) "Turned off" else "$channel · ${radio.htmode}$power")
-                    },
-                    trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
-                )
-            }
+    ListCard(label = "Radios") {
+        config.radios.forEachIndexed { index, radio ->
+            if (index > 0) RowDivider()
+            val channel = if (radio.channel == "auto") "auto channel" else "ch ${radio.channel}"
+            val power = radio.txpower?.let { " · $it dBm" }.orEmpty()
+            ListRow(
+                radio.band.label(),
+                icon = Icons.Default.SettingsInputAntenna,
+                detail = if (radio.disabled) "Turned off" else "$channel · ${radio.htmode}$power",
+                monoDetail = !radio.disabled,
+                onClick = { onOpen(radio) },
+                trailing = if (radio.disabled) { { TagChip("Off") } } else null,
+            )
         }
     }
 }

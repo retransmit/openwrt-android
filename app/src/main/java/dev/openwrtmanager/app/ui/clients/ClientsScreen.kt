@@ -36,6 +36,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.Label
+import dev.openwrtmanager.app.ui.kit.ListCard
+import dev.openwrtmanager.app.ui.kit.ListRow
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.TagChip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
@@ -83,13 +89,12 @@ fun ClientsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text("Connected now (${state.online.size})", style = MaterialTheme.typography.titleMedium)
-                    if (state.online.isEmpty()) Text("No devices seen right now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ClientList(state.online) { open = it }
-                    if (state.blocked.isNotEmpty()) {
-                        Text("Blocked (${state.blocked.size})", style = MaterialTheme.typography.titleMedium)
-                        ClientList(state.blocked) { open = it }
+                    if (state.online.isEmpty()) {
+                        Label("Connected now · 0", Modifier.padding(start = 4.dp))
+                        Text("No devices seen right now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    ClientList("Connected now · ${state.online.size}", state.online) { open = it }
+                    ClientList("Blocked · ${state.blocked.size}", state.blocked) { open = it }
                 }
             }
         }
@@ -123,27 +128,29 @@ fun ClientsScreen(
 }
 
 @Composable
-private fun ClientList(clients: List<Client>, onOpen: (Client) -> Unit) {
+private fun ClientList(label: String, clients: List<Client>, onOpen: (Client) -> Unit) {
     if (clients.isEmpty()) return
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ListCard(label = label) {
         clients.forEachIndexed { index, client ->
-            if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-            ListItem(
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                modifier = Modifier.clickable { onOpen(client) },
-                leadingContent = {
-                    Icon(
-                        when {
-                            client.blocked -> Icons.Default.Block
-                            client.link == ClientLink.WIFI -> Icons.Default.Wifi
-                            else -> Icons.Default.Lan
-                        },
-                        contentDescription = null,
-                    )
+            if (index > 0) RowDivider()
+            ListRow(
+                client.name ?: "Unknown device",
+                icon = when {
+                    client.blocked -> Icons.Default.Block
+                    client.link == ClientLink.WIFI -> Icons.Default.Wifi
+                    else -> Icons.Default.Lan
                 },
-                headlineContent = { Text(client.name ?: "Unknown device") },
-                supportingContent = { Text(listOfNotNull(client.ip, linkText(client)).joinToString(", ")) },
-                trailingContent = { if (client.reserved) SuggestionChip(onClick = { onOpen(client) }, label = { Text("Reserved") }) },
+                detail = listOfNotNull(client.ip, linkText(client)).joinToString("\n"),
+                monoDetail = true,
+                onClick = { onOpen(client) },
+                trailing = {
+                    when {
+                        client.blocked -> TagChip("Blocked", tone = ChipTone.ERROR)
+                        client.reserved -> TagChip("Reserved", tone = ChipTone.ACCENT)
+                        client.link == ClientLink.WIRED -> TagChip("LAN")
+                        client.band != null -> TagChip(client.band.label())
+                    }
+                },
             )
         }
     }

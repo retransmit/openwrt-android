@@ -18,9 +18,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lan
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.ui.unit.sp
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.Label
+import dev.openwrtmanager.app.ui.kit.MonoText
+import dev.openwrtmanager.app.ui.kit.Readout
+import dev.openwrtmanager.app.ui.kit.SectionCard
+import dev.openwrtmanager.app.ui.kit.TagChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -99,7 +104,7 @@ fun VlanScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 (extrasUi as? ExtrasUi.Ready)?.let { state -> InterfacesSection(state, onEditPool = { dialogs.pool = it }) }
-                if (ui is VlanUi.Ready) Text("VLANs", style = MaterialTheme.typography.titleMedium)
+                if (ui is VlanUi.Ready) Label("VLANs", Modifier.padding(start = 4.dp, top = 4.dp))
                 when (val state = ui) {
                     VlanUi.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
                     VlanUi.Offline -> Notice(Icons.Default.LinkOff, "Not connected", "Connect to a device on the Home tab to manage its network.")
@@ -187,20 +192,24 @@ fun VlanScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VlanCard(row: VlanRow, ports: List<String>, onEdit: () -> Unit, onRemove: () -> Unit) {
-    ElevatedCard(Modifier.fillMaxWidth().clickable(onClick = onEdit)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionCard(Modifier.clickable(onClick = onEdit)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val title = if (row.home) "Home network" else row.name ?: "VLAN ${row.vid}"
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                listOfNotNull("VLAN ${row.vid}", row.subnet ?: if (!row.home) "no address on this router" else null).joinToString(", "),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Readout("${row.vid}", color = MaterialTheme.colorScheme.primary, size = 20.sp)
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    MonoText(
+                        row.subnet ?: if (!row.home) "no address on this router" else "",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 ports.forEach { port ->
                     val role = row.roles[port] ?: PortRole.NONE
                     if (role != PortRole.NONE) {
-                        AssistChip(onClick = onEdit, label = { Text("$port ${if (role == PortRole.UNTAGGED) "device" else "tagged"}") })
+                        TagChip("$port ${if (role == PortRole.UNTAGGED) "device" else "tagged"}", tone = if (role == PortRole.UNTAGGED) ChipTone.ACCENT else ChipTone.NEUTRAL)
                     }
                 }
                 if (row.roles.values.none { it != PortRole.NONE }) {
