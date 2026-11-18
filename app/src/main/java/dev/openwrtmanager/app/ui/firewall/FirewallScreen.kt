@@ -13,7 +13,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.unit.sp
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.Label
+import dev.openwrtmanager.app.ui.kit.ListCard
+import dev.openwrtmanager.app.ui.kit.MonoText
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.SectionCard
+import dev.openwrtmanager.app.ui.kit.TagChip
+import dev.openwrtmanager.app.ui.theme.LocalExtraColors
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -84,7 +94,7 @@ fun FirewallScreen(
                     Button(onClick = viewModel::load) { Text("Try again") }
                 }
                 is FirewallUi.Ready -> {
-                    Text("Port forwards", style = MaterialTheme.typography.titleMedium)
+                    Label("Port forwards · ${state.view.forwards.size}", Modifier.padding(start = 4.dp))
                     if (state.privateWan) {
                         Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.medium) {
                             Text(
@@ -107,14 +117,14 @@ fun FirewallScreen(
                         Text(" Add port forward")
                     }
 
-                    Text("Traffic rules", style = MaterialTheme.typography.titleMedium)
+                    Label("Traffic rules · ${state.view.rules.size}", Modifier.padding(start = 4.dp, top = 8.dp))
                     RuleList(
                         state.view.rules,
                         onToggle = { rule, on -> scope.launch { review(viewModel.setRuleEnabled(rule, on)) } },
                         onRemove = { removingRule = it },
                     )
 
-                    Text("Zones", style = MaterialTheme.typography.titleMedium)
+                    Label("Zones · ${state.view.zones.size}", Modifier.padding(start = 4.dp, top = 8.dp))
                     state.view.zones.forEach { ZoneCard(it) }
                 }
             }
@@ -178,19 +188,20 @@ private class ForwardEdit(val existing: PortForward?)
 @Composable
 private fun ForwardList(forwards: List<PortForward>, onToggle: (PortForward, Boolean) -> Unit, onEdit: (PortForward) -> Unit, onRemove: (PortForward) -> Unit) {
     if (forwards.isEmpty()) return
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ListCard {
         forwards.forEachIndexed { index, forward ->
-            if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-            Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp)) {
+            if (index > 0) RowDivider()
+            Column(Modifier.padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(forward.name, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "${forward.protocols.sorted().joinToString("/") { it.uppercase() }} ${forward.outsidePort} to " +
-                                "${forward.insideIp ?: "?"}${forward.insidePort?.let { ":$it" } ?: ""}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TagChip(forward.protocols.sorted().joinToString("/") { it.uppercase() })
+                            MonoText(
+                                "${forward.outsidePort} → ${forward.insideIp ?: "?"}${forward.insidePort?.let { ":$it" } ?: ""}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     Switch(checked = forward.enabled, onCheckedChange = { onToggle(forward, it) })
                 }
@@ -209,10 +220,10 @@ private fun RuleList(rules: List<TrafficRule>, onToggle: (TrafficRule, Boolean) 
         Text("No traffic rules.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ListCard {
         rules.forEachIndexed { index, rule ->
-            if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-            Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (index > 0) RowDivider()
+            Row(Modifier.padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(rule.name, style = MaterialTheme.typography.bodyLarge)
                     Text(rule.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -224,22 +235,45 @@ private fun RuleList(rules: List<TrafficRule>, onToggle: (TrafficRule, Boolean) 
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ZoneCard(zone: Zone) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(zone.name, style = MaterialTheme.typography.titleSmall)
-            Text("Networks: ${zone.networks.joinToString(", ").ifEmpty { "none" }}", style = MaterialTheme.typography.bodySmall)
-            Text(
-                "Into the router: ${policy(zone.input)}. Out: ${policy(zone.output)}. Between its networks: ${policy(zone.forward)}.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                if (zone.forwardsTo.isEmpty()) "Cannot start connections to other zones." else "May start connections to: ${zone.forwardsTo.joinToString(", ")}.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            if (zone.masq) Text("Shares one address for the internet (masquerading).", style = MaterialTheme.typography.bodySmall)
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(zone.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            if (zone.masq) TagChip("masquerade", tone = ChipTone.ACCENT)
         }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (zone.networks.isEmpty()) TagChip("no networks")
+            zone.networks.forEach { TagChip(it) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            PolicyFigure("In", zone.input)
+            PolicyFigure("Out", zone.output)
+            PolicyFigure("Between", zone.forward)
+        }
+        Text(
+            if (zone.forwardsTo.isEmpty()) "Cannot start connections to other zones." else "May start connections to: ${zone.forwardsTo.joinToString(", ")}.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun PolicyFigure(label: String, value: String) {
+    Column {
+        Label(label)
+        val word = policy(value)
+        MonoText(
+            word,
+            color = when (word) {
+                "allowed" -> LocalExtraColors.current.online
+                "refused", "dropped" -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurface
+            },
+            size = 13.sp,
+        )
     }
 }
 
