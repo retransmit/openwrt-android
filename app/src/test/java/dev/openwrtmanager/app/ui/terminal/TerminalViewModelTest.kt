@@ -41,6 +41,36 @@ class TerminalViewModelTest {
     }
 
     @Test
+    fun a_new_size_after_opening_reaches_the_shell() = runBlocking<Unit> {
+        val vm = viewModel()
+        vm.start(80, 24)
+        waitFor { vm.ui.value is TerminalUi.Open }
+        // The screen reports its size the same way every time, as when the keyboard opens.
+        vm.start(80, 14)
+        waitFor { shells.single().sizes.isNotEmpty() }
+        assertEquals(listOf(80 to 14), shells.single().sizes)
+        assertEquals(14, (vm.ui.value as TerminalUi.Open).session.screen.value.rows.size)
+    }
+
+    @Test
+    fun a_size_change_while_connecting_is_applied_once_open() = runBlocking<Unit> {
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val vm = TerminalViewModel { cols, rows ->
+            gate.await()
+            sizes += cols to rows
+            FakeShell().also { shells += it }
+        }
+        vm.start(80, 40)
+        vm.start(80, 20)
+        gate.countDown()
+        waitFor { vm.ui.value is TerminalUi.Open }
+        assertEquals("opened at the first size", listOf(80 to 40), sizes)
+        waitFor { shells.single().sizes.isNotEmpty() }
+        assertEquals(listOf(80 to 20), shells.single().sizes)
+        assertEquals(20, (vm.ui.value as TerminalUi.Open).session.screen.value.rows.size)
+    }
+
+    @Test
     fun disconnect_is_shown_and_input_is_refused() = runBlocking<Unit> {
         val vm = viewModel()
         vm.start(80, 24)
@@ -82,6 +112,7 @@ class TerminalViewModelTest {
         vm.start(80, 24)
         waitFor { vm.ui.value is TerminalUi.Open }
         vm.close()
-        assertTrue(!shells.single().isOpen)
+        // Closing happens off the main thread, since it can block on the network.
+        waitFor { !shells.single().isOpen }
     }
 }
