@@ -85,6 +85,7 @@ fun AppNav() {
                 onSystem = { nav.navigate("system") },
                 onPackages = { nav.navigate("packages") },
                 onBackup = { nav.navigate("backup") },
+                onTerminal = { nav.navigate("terminal") },
             )
         }
         composable(
@@ -105,6 +106,7 @@ fun AppNav() {
         composable("logs") { dev.openwrtmanager.app.ui.admin.LogsScreen(onBack = { nav.popBackStack() }) }
         composable("packages") { dev.openwrtmanager.app.ui.admin.PackagesScreen(onBack = { nav.popBackStack() }) }
         composable("backup") { dev.openwrtmanager.app.ui.admin.BackupScreen(onBack = { nav.popBackStack() }) }
+        composable("terminal") { dev.openwrtmanager.app.ui.terminal.TerminalScreen(onBack = { nav.popBackStack() }) }
         composable("system") { dev.openwrtmanager.app.ui.admin.SystemScreen(onBack = { nav.popBackStack() }) }
         composable("firewall") {
             dev.openwrtmanager.app.ui.firewall.FirewallScreen(onBack = { nav.popBackStack() })
@@ -150,6 +152,7 @@ private fun MainTabs(
     onSystem: () -> Unit,
     onPackages: () -> Unit,
     onBackup: () -> Unit,
+    onTerminal: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var switcherOpen by rememberSaveable { mutableStateOf(false) }
@@ -169,7 +172,7 @@ private fun MainTabs(
         when (tab) {
             Tab.HOME -> HomeScreen(onSwitchDevice = { switcherOpen = true }, onAddDevice = onAddDevice)
             Tab.NETWORK -> dev.openwrtmanager.app.ui.network.VlanScreen()
-            Tab.MORE -> dev.openwrtmanager.app.ui.more.MoreScreen(onFirewall = onFirewall, onServices = onServices, onLogs = onLogs, onSystem = onSystem, onPackages = onPackages, onBackup = onBackup)
+            Tab.MORE -> dev.openwrtmanager.app.ui.more.MoreScreen(onFirewall = onFirewall, onServices = onServices, onLogs = onLogs, onSystem = onSystem, onPackages = onPackages, onBackup = onBackup, onTerminal = onTerminal)
             Tab.CLIENTS -> dev.openwrtmanager.app.ui.clients.ClientsScreen()
             Tab.WIFI -> WifiScreen(onEditNetwork = onEditNetwork, onWizard = onWizard, onMirror = onMirror)
             else -> ComingLater(tab)

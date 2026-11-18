@@ -18,6 +18,7 @@ import dev.openwrtmanager.app.data.RoomProfileRepository
 import dev.openwrtmanager.app.data.SecretStore
 import javax.inject.Qualifier
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import javax.inject.Singleton
 
 @Qualifier
@@ -171,6 +172,28 @@ object WifiModule {
     ): dev.openwrtmanager.app.admin.AdminGatewayProvider = dev.openwrtmanager.app.admin.AdminGatewayProvider {
         (connection.state.value as? dev.openwrtmanager.app.connection.ConnectionState.Online)
             ?.let { dev.openwrtmanager.app.admin.SshAdminGateway(it.ssh) }
+    }
+
+    /** The terminal gets a connection of its own, closed together with its shell. */
+    @Provides
+    fun shellOpener(
+        profiles: ProfileRepository,
+        sessions: dev.openwrtmanager.app.connection.ProfileSessions,
+    ): dev.openwrtmanager.app.ui.terminal.ShellOpener = dev.openwrtmanager.app.ui.terminal.ShellOpener { cols, rows ->
+        val id = profiles.observeActiveId().first() ?: return@ShellOpener null
+        val executor = sessions.open(id) as? dev.openwrtmanager.app.ssh.SshjExecutor ?: return@ShellOpener null
+        val shell = try {
+            executor.openShell(cols, rows)
+        } catch (e: Exception) {
+            executor.close()
+            throw e
+        }
+        object : dev.openwrtmanager.app.ssh.SshShell by shell {
+            override fun close() {
+                shell.close()
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { executor.close() }
+            }
+        }
     }
 
     @Provides
