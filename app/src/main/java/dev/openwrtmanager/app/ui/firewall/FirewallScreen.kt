@@ -195,13 +195,12 @@ private fun ForwardList(forwards: List<PortForward>, onToggle: (PortForward, Boo
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(forward.name, style = MaterialTheme.typography.bodyLarge)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TagChip(forward.protocols.sorted().joinToString("/") { it.uppercase() })
-                            MonoText(
-                                "${forward.outsidePort} → ${forward.insideIp ?: "?"}${forward.insidePort?.let { ":$it" } ?: ""}",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        TagChip(forward.protocols.sorted().joinToString("/") { it.uppercase() })
+                        MonoText(
+                            "${forward.outsidePort} → ${forward.insideIp ?: "?"}${forward.insidePort?.let { ":$it" } ?: ""}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                        )
                     }
                     Switch(checked = forward.enabled, onCheckedChange = { onToggle(forward, it) })
                 }

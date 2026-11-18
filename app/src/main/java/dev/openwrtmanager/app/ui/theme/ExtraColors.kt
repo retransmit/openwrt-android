@@ -17,8 +17,8 @@ private val Warning = Color(0xFFF2B04A)
 
 fun extraColorsFor(scheme: ColorScheme, dark: Boolean) = ExtraColors(
     // A darker green and amber keep enough contrast on light surfaces.
-    online = if (dark) Online else Color(0xFF1E8E4E),
-    warning = if (dark) Warning else Color(0xFFB0700A),
+    online = if (dark) Online else Color(0xFF17753F),
+    warning = if (dark) Warning else Color(0xFF8A5600),
     onWarning = Color(0xFF2B1A00),
     accentTint = scheme.primary.copy(alpha = if (dark) 0.16f else 0.12f),
 )

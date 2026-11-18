@@ -196,10 +196,11 @@ private fun StatusLine(status: HomeStatus, responseMs: Long?) {
 /** "42.3 Mbps" split into the number and its unit, for a readout. */
 private fun rateParts(bps: Long): Pair<String, String> = formatRate(bps).let { it.substringBefore(' ') to it.substringAfter(' ') }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SpeedCard(rate: Rate?, history: List<Rate>) {
     SectionCard(label = "Internet", trailing = { LiveMarker() }, glow = true) {
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             SpeedFigure(Icons.Default.ArrowDownward, "Download", rate?.downBps, MaterialTheme.colorScheme.primary)
             SpeedFigure(Icons.Default.ArrowUpward, "Upload", rate?.upBps, MaterialTheme.colorScheme.tertiary)
         }
@@ -257,7 +258,7 @@ private fun StatsGrid(ui: HomeUi) {
                 flash?.toString() ?: "–",
                 Modifier.weight(1f).fillMaxHeight(),
                 unit = flash?.let { "%" },
-                usage = flash ?: 0,
+                usage = flash,
                 detail = free,
             )
         }

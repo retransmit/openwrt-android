@@ -135,6 +135,35 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun response_time_never_includes_waiting_behind_other_commands() = runTest(dispatcher) {
+        addProfile()
+        counters(1_000, 500)
+        router.serialize = true
+        // The 10 s refresh is slow enough that a speed poll lands while it holds the connection.
+        router.delayOf = { if (it == CMD_ETH1) 23 else 700 }
+        val vm = start()
+        val seen = mutableSetOf<Long>()
+        repeat(120) {
+            advanceTimeBy(250)
+            runCurrent()
+            vm.ui.value.responseMs?.let { seen += it }
+        }
+        assertEquals(setOf(23L), seen)
+    }
+
+    @Test
+    fun access_point_without_dhcp_still_gets_a_response_time() = runTest(dispatcher) {
+        router.respond(CMD_IFACES, Fixtures.read("iface_dump_no_wan.json"))
+        router.respond(CMD_LEASES, "", exitCode = 1)
+        addProfile()
+        router.delayMs = 17
+        val vm = start()
+        advanceTimeBy(11_000)
+        runCurrent()
+        assertEquals(17L, vm.ui.value.responseMs)
+    }
+
+    @Test
     fun response_time_hidden_when_not_online() = runTest(dispatcher) {
         addProfile()
         counters(1_000, 500)
