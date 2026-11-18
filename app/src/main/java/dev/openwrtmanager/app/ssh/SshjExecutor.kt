@@ -68,6 +68,24 @@ class SshjExecutor(private val target: SshTarget) : SshExecutor {
         mutex.withLock { drop() }
     }
 
+    /**
+     * Opens an interactive shell on a pseudo terminal of [cols] by [rows]. It shares this connection,
+     * so the terminal screen gives it an executor of its own and closes both when it goes away.
+     */
+    suspend fun openShell(cols: Int, rows: Int, term: String = "xterm-256color"): SshShell = mutex.withLock {
+        val ssh = ensureConnected()
+        withContext(Dispatchers.IO) {
+            try {
+                val session = ssh.startSession()
+                session.allocatePTY(term, cols, rows, 0, 0, emptyMap())
+                SshjShell(session, session.startShell())
+            } catch (e: IOException) {
+                drop()
+                throw SshError.Disconnected(e)
+            }
+        }
+    }
+
     private suspend fun ensureConnected(): SSHClient = withContext(Dispatchers.IO) {
         client?.let { existing ->
             if (existing.isConnected && existing.isAuthenticated) return@withContext existing
