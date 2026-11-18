@@ -16,7 +16,10 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.ui.unit.sp
+import dev.openwrtmanager.app.ui.kit.MonoText
+import dev.openwrtmanager.app.ui.theme.MonoFamily
+import dev.openwrtmanager.app.ui.kit.SectionCard as KitSectionCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -78,12 +81,14 @@ fun ConfigListScreen(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: Ed
             )
             LazyColumn {
                 items(ui.configs) { name ->
-                    ListItem(
-                        modifier = Modifier.clickable { onOpen(name) },
-                        headlineContent = { Text(name, fontFamily = FontFamily.Monospace) },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
-                    )
-                    HorizontalDivider()
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onOpen(name) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        MonoText(name, Modifier.weight(1f), size = 15.sp)
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
         }
@@ -112,7 +117,7 @@ fun ConfigEditScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(name, fontFamily = FontFamily.Monospace) },
+                title = { Text(name, fontFamily = MonoFamily) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
             )
         },
@@ -174,7 +179,7 @@ fun ConfigEditScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     ui.edits.forEachIndexed { index, edit ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(describe(edit), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                            Text(describe(edit), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, fontFamily = MonoFamily)
                             TextButton(onClick = { viewModel.unstage(index) }) { Text("Undo") }
                         }
                     }
@@ -195,15 +200,15 @@ private fun SectionCard(
     onRemove: () -> Unit,
 ) {
     val removed = section.state == ItemState.REMOVED
-    ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        Column(Modifier.padding(12.dp)) {
+    KitSectionCard(Modifier.padding(horizontal = 16.dp)) {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(section.type, style = MaterialTheme.typography.titleSmall)
                     Text(
                         section.name + if (section.anonymous) " (unnamed)" else "",
                         style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = MonoFamily,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     when (section.state) {
@@ -238,8 +243,8 @@ private fun OptionRow(option: OptionView, enabled: Boolean, onClick: () -> Unit)
         else -> MaterialTheme.colorScheme.primary
     }
     Row(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(vertical = 6.dp)) {
-        Text(option.option, Modifier.weight(0.4f), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
-        Text(text, Modifier.weight(0.6f), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, color = color)
+        Text(option.option, Modifier.weight(0.4f), fontFamily = MonoFamily, style = MaterialTheme.typography.bodyMedium)
+        Text(text, Modifier.weight(0.6f), fontFamily = MonoFamily, style = MaterialTheme.typography.bodyMedium, color = color)
     }
 }
 
@@ -272,7 +277,7 @@ private fun OptionDialog(target: OptionTarget, onDismiss: () -> Unit, onRemove: 
                     label = { Text(if (isList) "Values, one per line" else "Value") },
                     singleLine = !isList,
                     minLines = if (isList) 3 else 1,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = MonoFamily),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

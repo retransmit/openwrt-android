@@ -37,6 +37,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.IconBadge
+import dev.openwrtmanager.app.ui.kit.MonoText
+import dev.openwrtmanager.app.ui.kit.TagChip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -120,21 +124,15 @@ private fun DeviceListItem(row: DeviceRow, onClick: () -> Unit, onEdit: () -> Un
     val profile = row.profile
     ListItem(
         modifier = Modifier.clickable(onClick = onClick),
-        leadingContent = { Icon(Icons.Default.Router, contentDescription = null) },
+        leadingContent = { IconBadge(Icons.Default.Router) },
         headlineContent = { Text(profile.name) },
         supportingContent = {
             val address = if (profile.port == 22) profile.host else "${profile.host}:${profile.port}"
-            Text("${profile.username}@$address")
+            MonoText("${profile.username}@$address", color = MaterialTheme.colorScheme.onSurfaceVariant)
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (row.active) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = "Current device",
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                if (row.active) TagChip("Current", tone = ChipTone.ACCENT)
                 Box {
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "More options for ${profile.name}")
