@@ -95,6 +95,44 @@ class LiveRouterTest {
         }
     }
 
+    /** Opens a PTY shell, asks its type and size, resizes it, and asks again. Reads only. */
+    @Test
+    fun pty_shell_works_on_the_router() = runBlocking<Unit> {
+        val host = System.getenv("OWM_LIVE_HOSTS")?.split(',')?.firstOrNull()?.trim().orEmpty()
+        val keyPath = System.getenv("OWM_LIVE_KEY").orEmpty()
+        assumeTrue("live router test not configured", host.isNotEmpty() && keyPath.isNotEmpty())
+        val fingerprint = SshjExecutor.probeFingerprint(host, 22)
+        val ssh = SshjExecutor(SshTarget(host, 22, "root", AuthType.KEY, File(keyPath).readText(), fingerprint))
+        val shell = ssh.openShell(90, 30)
+        fun readFor(ms: Long): String {
+            val end = System.currentTimeMillis() + ms
+            val out = StringBuilder()
+            while (System.currentTimeMillis() < end) {
+                if (shell.input.available() > 0) out.append(shell.input.read().toChar()) else Thread.sleep(20)
+            }
+            return out.toString()
+        }
+        try {
+            readFor(1_500)
+            // busybox here has no stty; an interactive bash reads the window size from the terminal.
+            shell.output.write("echo T=\$TERM; bash -ic 'echo S=\$COLUMNS:\$LINES' 2>/dev/null\n".toByteArray())
+            shell.output.flush()
+            val first = readFor(1_500)
+            assertTrue(first, first.contains("T=xterm-256color"))
+            assertTrue(first, first.contains("S=90:30"))
+            shell.resize(120, 40)
+            Thread.sleep(300)
+            shell.output.write("bash -ic 'echo S=\$COLUMNS:\$LINES' 2>/dev/null\n".toByteArray())
+            shell.output.flush()
+            val second = readFor(1_500)
+            assertTrue(second, second.contains("S=120:40"))
+            println("LIVE pty on $host: xterm-256color, 90x30 then 120x40")
+        } finally {
+            shell.close()
+            ssh.close()
+        }
+    }
+
     @Test
     fun client_sources_read_on_real_routers() = runBlocking<Unit> {
         val hosts = System.getenv("OWM_LIVE_HOSTS")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
