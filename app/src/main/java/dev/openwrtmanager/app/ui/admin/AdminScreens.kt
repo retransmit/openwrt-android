@@ -3,6 +3,7 @@ package dev.openwrtmanager.app.ui.admin
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,6 +77,15 @@ private fun AdminScaffold(title: String, onBack: () -> Unit, content: @Composabl
     ) { padding -> content(Modifier.fillMaxSize().padding(padding)) }
 }
 
+/**
+ * A thin bar at the top of [modifier]'s area. The scaffold's modifier fills the screen, so handing it
+ * straight to the bar stretched the bar's light track over the whole screen while loading.
+ */
+@Composable
+private fun LoadingBar(modifier: Modifier) {
+    Box(modifier) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+}
+
 @Composable
 private fun MessageDialog(message: String?, onDismiss: () -> Unit) {
     if (message == null) return
@@ -95,7 +105,7 @@ fun ServicesScreen(onBack: () -> Unit, viewModel: ServicesViewModel = hiltViewMo
 
     AdminScaffold("Services", onBack) { modifier ->
         when (val state = ui) {
-            ServicesUi.Loading -> LinearProgressIndicator(modifier.fillMaxWidth())
+            ServicesUi.Loading -> LoadingBar(modifier)
             ServicesUi.Offline -> Text("Connect to a device on the Home tab first.", modifier.padding(16.dp))
             ServicesUi.Failed -> Text("Could not read the services.", modifier.padding(16.dp))
             is ServicesUi.Ready -> {
@@ -193,7 +203,7 @@ fun SystemScreen(onBack: () -> Unit, viewModel: SystemViewModel = hiltViewModel(
 
     AdminScaffold("System", onBack) { modifier ->
         when (val state = ui) {
-            SystemUi.Loading -> LinearProgressIndicator(modifier.fillMaxWidth())
+            SystemUi.Loading -> LoadingBar(modifier)
             SystemUi.Offline -> Text("Connect to a device on the Home tab first.", modifier.padding(16.dp))
             SystemUi.Failed -> Text("Could not read the device's settings.", modifier.padding(16.dp))
             is SystemUi.Ready -> {
