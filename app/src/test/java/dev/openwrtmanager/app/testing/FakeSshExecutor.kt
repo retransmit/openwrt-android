@@ -20,12 +20,18 @@ class FakeSshExecutor(
     var handler: ((String) -> ExecResult?)? = null
     var closed = false
 
+    /** How long each command takes, in (virtual) milliseconds. */
+    var delayMs: Long = 0
+
     fun respond(command: String, stdout: String, exitCode: Int = 0, stderr: String = "") {
         responses[command] = ExecResult(exitCode, stdout, stderr)
     }
 
     /** When a script is sent as input, the script is what matters, so that is what gets recorded and matched. */
-    override suspend fun exec(command: String, timeoutMs: Long, stdin: String?): ExecResult = run(stdin ?: command)
+    override suspend fun exec(command: String, timeoutMs: Long, stdin: String?): ExecResult {
+        if (delayMs > 0) kotlinx.coroutines.delay(delayMs)
+        return run(stdin ?: command)
+    }
 
     private fun run(command: String): ExecResult {
         failWith?.let { throw it }

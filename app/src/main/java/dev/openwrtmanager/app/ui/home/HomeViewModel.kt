@@ -62,6 +62,8 @@ data class HomeUi(
     val wifi: List<WifiRow> = emptyList(),
     val clientTotal: Int? = null,
     val system: SystemInfo? = null,
+    /** How long one command to the router took, in milliseconds; null unless online. */
+    val responseMs: Long? = null,
 )
 
 fun mergeWifi(networks: List<WifiNetwork>): List<WifiRow> =
@@ -106,11 +108,11 @@ class HomeViewModel @Inject constructor(
                 }
                 is ConnectionState.Connecting -> {
                     show(state.profile)
-                    _ui.update { it.copy(status = HomeStatus.Connecting) }
+                    _ui.update { it.copy(status = HomeStatus.Connecting, responseMs = null) }
                 }
                 is ConnectionState.Offline -> {
                     show(state.profile)
-                    _ui.update { it.copy(status = HomeStatus.Offline(state.error), refreshing = false) }
+                    _ui.update { it.copy(status = HomeStatus.Offline(state.error), refreshing = false, responseMs = null) }
                 }
                 is ConnectionState.Online -> {
                     show(state.profile)
@@ -198,15 +200,24 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun sampleRate(router: RouterClient) {
         val device = uplink ?: return
+        val started = time.nowMillis()
         val counters = soft { router.counters(device) } ?: return
+        noteResponse(time.nowMillis() - started)
         val rate = sampler.sample(counters, time.nowMillis()) ?: return
         _ui.update { it.copy(rate = rate, history = (it.history + rate).takeLast(HISTORY_SIZE)) }
+    }
+
+    private fun noteResponse(ms: Long) {
+        if (_ui.value.status is HomeStatus.Online) _ui.update { it.copy(responseMs = ms) }
     }
 
     private suspend fun refreshSlow(router: RouterClient) {
         val system = soft { router.systemInfo() }
         val wifi = soft { router.wifiNetworks() }
+        val started = time.nowMillis()
         val leases = soft { router.leaseCount() }
+        // Without an uplink there is no fast poll to time; this is one command, so it stands in for it.
+        if (leases != null && uplink == null) noteResponse(time.nowMillis() - started)
         // A failed read keeps the previous answer: only a successful one may say there is no uplink.
         val device = try {
             router.uplinkDevice()

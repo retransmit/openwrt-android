@@ -8,6 +8,9 @@ data class SystemInfo(
     val load1: Double,
     val memTotalBytes: Long,
     val memAvailableBytes: Long,
+    /** Writable flash ("/" on the router), null when the router does not report it. */
+    val flashTotalBytes: Long? = null,
+    val flashUsedBytes: Long? = null,
 )
 
 data class Counters(val rxBytes: Long, val txBytes: Long)

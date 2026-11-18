@@ -1,6 +1,7 @@
 package dev.openwrtmanager.app.ui.common
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class FormatTest {
@@ -29,5 +30,20 @@ class FormatTest {
         assertEquals(41, memoryUsedPercent(totalBytes = 1000, availableBytes = 590))
         assertEquals(0, memoryUsedPercent(totalBytes = 0, availableBytes = 0))
         assertEquals(0, memoryUsedPercent(totalBytes = 100, availableBytes = 500))
+    }
+
+    @Test
+    fun flash_percent() {
+        assertEquals(25, flashUsedPercent(8000, 2000))
+        assertNull(flashUsedPercent(0, 0))
+        assertNull(flashUsedPercent(null, 10))
+        assertEquals(100, flashUsedPercent(100, 150))
+    }
+
+    @Test
+    fun bytes_pick_a_readable_unit() {
+        assertEquals("512 B", formatBytes(512))
+        assertEquals("7.8 MB", formatBytes(8_178_892))
+        assertEquals("1.2 GB", formatBytes(1_288_490_189))
     }
 }

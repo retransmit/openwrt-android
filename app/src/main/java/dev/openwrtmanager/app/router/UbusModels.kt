@@ -19,7 +19,12 @@ internal data class InfoDto(
     val uptime: Long = 0,
     val load: List<Long> = emptyList(),
     val memory: MemoryDto = MemoryDto(),
+    /** The filesystem at "/", in KiB: on a normal install, the writable flash overlay. */
+    val root: StorageDto? = null,
 )
+
+@Serializable
+internal data class StorageDto(val total: Long = 0, val free: Long = 0, val used: Long = 0, val avail: Long = 0)
 
 @Serializable
 internal data class MemoryDto(
