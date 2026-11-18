@@ -38,6 +38,11 @@ interface AdminGateway {
 
     /** The device name inside an uploaded backup, to tell which device it came from. */
     suspend fun restoreHostname(token: String): String?
+
+    /** Every uci config file on the device, sorted. */
+    suspend fun configs(): List<String>
+
+    suspend fun loadConfig(name: String): UciConfig
 }
 
 fun interface AdminGatewayProvider {
@@ -71,6 +76,14 @@ class SshAdminGateway(
     }
 
     override suspend fun restoreHostname(token: String): String? = parseBackupHostname(ssh.exec(restoreInfoCommand(token)).stdout)
+
+    override suspend fun configs(): List<String> {
+        val result = ssh.exec("ubus call uci configs")
+        if (result.exitCode != 0) throw IllegalStateException("uci configs failed")
+        return dev.openwrtmanager.app.editor.parseConfigs(result.stdout)
+    }
+
+    override suspend fun loadConfig(name: String): UciConfig = dev.openwrtmanager.app.uci.UciClient(ssh).load(name)
 
     override suspend fun services(): List<Service> {
         val result = ssh.exec("ubus call rc list")
