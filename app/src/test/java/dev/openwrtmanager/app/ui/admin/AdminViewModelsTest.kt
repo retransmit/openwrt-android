@@ -92,6 +92,16 @@ class FakeAdminGateway : AdminGateway {
     var restoreHostname: String? = "OpenWrt"
 
     override suspend fun restoreHostname(token: String): String? = restoreHostname
+
+    var configList = listOf("dhcp", "network", "system")
+    val configs = mutableMapOf("system" to system)
+    var configLoads = 0
+
+    override suspend fun configs() = configList
+    override suspend fun loadConfig(name: String): UciConfig {
+        configLoads++
+        return configs[name] ?: UciConfig(name, emptyList())
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
