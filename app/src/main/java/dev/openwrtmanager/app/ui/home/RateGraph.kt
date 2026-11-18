@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -22,7 +23,7 @@ import dev.openwrtmanager.app.ui.common.formatRate
 fun RateGraph(history: List<Rate>, slots: Int, modifier: Modifier = Modifier) {
     val downColor = MaterialTheme.colorScheme.primary
     val upColor = MaterialTheme.colorScheme.tertiary
-    val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     val peak = history.maxOfOrNull { maxOf(it.downBps, it.upBps) } ?: 0L
     val description = if (history.isEmpty()) "Speed graph, waiting for data" else "Speed graph, peak ${formatRate(peak)}"
 
@@ -54,7 +55,8 @@ private fun DrawScope.drawSeries(values: List<Long>, slots: Int, scale: Float, c
             lineTo(startX, size.height)
             close()
         }
-        drawPath(area, color.copy(alpha = 0.18f))
+        // The fill fades towards the baseline, so the line reads first.
+        drawPath(area, Brush.verticalGradient(listOf(color.copy(alpha = 0.35f), color.copy(alpha = 0.02f))))
     }
     drawPath(line, color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
