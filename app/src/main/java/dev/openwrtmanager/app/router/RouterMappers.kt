@@ -11,6 +11,8 @@ internal fun toSystemInfo(board: BoardDto, info: InfoDto): SystemInfo = SystemIn
     load1 = (info.load.firstOrNull() ?: 0L) / 65536.0,
     memTotalBytes = info.memory.total,
     memAvailableBytes = info.memory.available ?: (info.memory.free + info.memory.buffered),
+    flashTotalBytes = info.root?.takeIf { it.total > 0 }?.let { it.total * 1024 },
+    flashUsedBytes = info.root?.takeIf { it.total > 0 }?.let { it.used * 1024 },
 )
 
 /**

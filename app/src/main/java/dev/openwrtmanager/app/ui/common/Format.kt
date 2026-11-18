@@ -31,3 +31,20 @@ fun memoryUsedPercent(totalBytes: Long, availableBytes: Long): Int {
     val used = (totalBytes - availableBytes).coerceIn(0, totalBytes)
     return ((used * 100) / totalBytes).toInt()
 }
+
+/** How full the flash is, or null when the router did not say. */
+fun flashUsedPercent(totalBytes: Long?, usedBytes: Long?): Int? {
+    if (totalBytes == null || usedBytes == null || totalBytes <= 0) return null
+    return ((usedBytes.coerceIn(0, totalBytes) * 100) / totalBytes).toInt()
+}
+
+/** A size in bytes as a short human string, for example "7.8 MB". */
+fun formatBytes(bytes: Long): String {
+    val value = bytes.coerceAtLeast(0)
+    return when {
+        value < 1024 -> "$value B"
+        value < 1024L * 1024 -> String.format(Locale.US, "%.1f KB", value / 1024.0)
+        value < 1024L * 1024 * 1024 -> String.format(Locale.US, "%.1f MB", value / (1024.0 * 1024))
+        else -> String.format(Locale.US, "%.1f GB", value / (1024.0 * 1024 * 1024))
+    }
+}

@@ -112,6 +112,42 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun response_time_is_the_time_one_poll_takes() = runTest(dispatcher) {
+        addProfile()
+        counters(1_000, 500)
+        router.delayMs = 23
+        val vm = start()
+        advanceTimeBy(2_500)
+        runCurrent()
+        assertEquals(23L, vm.ui.value.responseMs)
+    }
+
+    @Test
+    fun response_time_comes_from_one_command_without_uplink() = runTest(dispatcher) {
+        router.respond(CMD_IFACES, Fixtures.read("iface_dump_no_wan.json"))
+        router.respond(CMD_LEASES, "1000\n")
+        addProfile()
+        router.delayMs = 17
+        val vm = start()
+        advanceTimeBy(11_000)
+        runCurrent()
+        assertEquals(17L, vm.ui.value.responseMs)
+    }
+
+    @Test
+    fun response_time_hidden_when_not_online() = runTest(dispatcher) {
+        addProfile()
+        counters(1_000, 500)
+        val vm = start()
+        advanceTimeBy(2_500)
+        runCurrent()
+        router.failWith = SshError.Disconnected()
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertNull(vm.ui.value.responseMs)
+    }
+
+    @Test
     fun device_without_uplink_skips_counters_but_still_loads_wifi() = runTest(dispatcher) {
         router.respond(CMD_IFACES, Fixtures.read("iface_dump_no_wan.json"))
         addProfile()

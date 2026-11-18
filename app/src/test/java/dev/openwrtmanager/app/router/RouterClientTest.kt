@@ -38,6 +38,22 @@ class RouterClientTest {
     }
 
     @Test
+    fun flash_comes_from_root_in_system_info() = runTest {
+        fake.respond("ubus call system info", """{"uptime":5,"load":[0,0,0],"memory":{"total":1000,"free":300,"buffered":50},"root":{"total":8000,"free":6000,"used":2000,"avail":6000}}""")
+        val info = client.systemInfo()
+        assertEquals(8000L * 1024, info.flashTotalBytes)
+        assertEquals(2000L * 1024, info.flashUsedBytes)
+    }
+
+    @Test
+    fun flash_is_null_when_root_is_missing() = runTest {
+        fake.respond("ubus call system info", """{"uptime":5,"load":[0,0,0],"memory":{"total":1000,"free":300,"buffered":50}}""")
+        val info = client.systemInfo()
+        assertNull(info.flashTotalBytes)
+        assertNull(dev.openwrtmanager.app.ui.common.flashUsedPercent(info.flashTotalBytes, info.flashUsedBytes))
+    }
+
+    @Test
     fun uplink_is_default_route_device() = runTest {
         assertEquals("eth1", client.uplinkDevice())
     }

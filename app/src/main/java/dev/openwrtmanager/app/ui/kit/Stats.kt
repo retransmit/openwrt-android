@@ -37,7 +37,7 @@ fun StatTile(
             Label(label)
             Readout(value, Modifier.padding(top = 4.dp), unit = unit, size = 17.sp)
             if (usage != null) UsageBar(usage, Modifier.padding(top = 8.dp))
-            if (detail != null) MonoText(detail, Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, size = 10.sp)
+            if (detail != null) MonoText(detail, Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, size = 10.sp, maxLines = 2)
         }
     }
 }
