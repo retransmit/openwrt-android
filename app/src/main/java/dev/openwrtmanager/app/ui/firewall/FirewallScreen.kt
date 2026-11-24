@@ -2,41 +2,38 @@ package dev.openwrtmanager.app.ui.firewall
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.ui.unit.sp
-import dev.openwrtmanager.app.ui.kit.ChipTone
-import dev.openwrtmanager.app.ui.kit.Label
-import dev.openwrtmanager.app.ui.kit.ListCard
-import dev.openwrtmanager.app.ui.kit.MonoText
-import dev.openwrtmanager.app.ui.kit.RowDivider
-import dev.openwrtmanager.app.ui.kit.SectionCard
-import dev.openwrtmanager.app.ui.kit.TagChip
-import dev.openwrtmanager.app.ui.theme.LocalExtraColors
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,7 +42,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,6 +55,17 @@ import dev.openwrtmanager.app.firewall.TrafficRule
 import dev.openwrtmanager.app.firewall.Zone
 import dev.openwrtmanager.app.ui.apply.ApplySheet
 import dev.openwrtmanager.app.ui.apply.ApplyViewModel
+import dev.openwrtmanager.app.ui.kit.BannerCard
+import dev.openwrtmanager.app.ui.kit.BannerTone
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.Label
+import dev.openwrtmanager.app.ui.kit.ListCard
+import dev.openwrtmanager.app.ui.kit.MonoText
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.SectionCard
+import dev.openwrtmanager.app.ui.kit.StateNotice
+import dev.openwrtmanager.app.ui.kit.TagChip
+import dev.openwrtmanager.app.ui.theme.LocalExtraColors
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,60 +83,89 @@ fun FirewallScreen(
     var editing by remember { mutableStateOf<ForwardEdit?>(null) }
     var removingRule by remember { mutableStateOf<TrafficRule?>(null) }
     val scope = rememberCoroutineScope()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val review: (ChangeSet?) -> Unit = { change -> if (change != null && !change.isEmpty()) applyViewModel.review(change) { viewModel.load() } }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
+            MediumTopAppBar(
                 title = { Text("Firewall") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                scrollBehavior = scrollBehavior,
             )
         },
+        floatingActionButton = {
+            if (ui is FirewallUi.Ready) {
+                ExtendedFloatingActionButton(
+                    onClick = { editing = ForwardEdit(null) },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Add forward") },
+                )
+            }
+        },
     ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        PullToRefreshBox(
+            isRefreshing = false,
+            onRefresh = viewModel::load,
+            modifier = Modifier.fillMaxSize().padding(padding),
         ) {
-            when (val state = ui) {
-                FirewallUi.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
-                FirewallUi.Offline -> Text("Connect to a device on the Home tab to see its firewall.")
-                FirewallUi.Failed -> {
-                    Text("Could not read the firewall.")
-                    Button(onClick = viewModel::load) { Text("Try again") }
-                }
-                is FirewallUi.Ready -> {
-                    Label("Port forwards · ${state.view.forwards.size}", Modifier.padding(start = 4.dp))
-                    if (state.privateWan) {
-                        Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.medium) {
-                            Text(
-                                "This router's internet address is private, so it sits behind another router. A port forward " +
-                                    "here works only if that router forwards the same port to this one.",
-                                Modifier.padding(12.dp),
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                when (val state = ui) {
+                    FirewallUi.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
+                    FirewallUi.Offline -> StateNotice(
+                        icon = Icons.Default.LinkOff,
+                        title = "Not connected",
+                        detail = "Connect to a device on the Home tab to manage its firewall.",
+                    )
+                    FirewallUi.Failed -> StateNotice(
+                        icon = Icons.Default.LinkOff,
+                        title = "Could not read firewall",
+                        detail = "The device did not answer as expected.",
+                        actionLabel = "Try again",
+                        onAction = viewModel::load,
+                    )
+                    is FirewallUi.Ready -> {
+                        if (state.privateWan) {
+                            BannerCard(
+                                text = "This router's WAN address is private, so it sits behind another router. A port forward here only works if that upstream router forwards the same port here.",
+                                icon = Icons.Default.Info,
+                                tone = BannerTone.INFO,
                             )
                         }
-                    }
-                    if (state.view.forwards.isEmpty()) Text("No port forwards.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ForwardList(
-                        state.view.forwards,
-                        onToggle = { forward, on -> scope.launch { review(viewModel.setForwardEnabled(forward, on)) } },
-                        onEdit = { editing = ForwardEdit(it) },
-                        onRemove = { scope.launch { review(viewModel.removeForward(it)) } },
-                    )
-                    OutlinedButton(onClick = { editing = ForwardEdit(null) }) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Text(" Add port forward")
-                    }
+                        if (state.view.forwards.isEmpty()) {
+                            SectionCard(label = "Port forwards · 0") {
+                                Text(
+                                    "No port forwards configured. Tap Add forward to expose a LAN service.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            ForwardList(
+                                state.view.forwards,
+                                onToggle = { forward, on -> scope.launch { review(viewModel.setForwardEnabled(forward, on)) } },
+                                onEdit = { editing = ForwardEdit(it) },
+                                onRemove = { scope.launch { review(viewModel.removeForward(it)) } },
+                            )
+                        }
 
-                    Label("Traffic rules · ${state.view.rules.size}", Modifier.padding(start = 4.dp, top = 8.dp))
-                    RuleList(
-                        state.view.rules,
-                        onToggle = { rule, on -> scope.launch { review(viewModel.setRuleEnabled(rule, on)) } },
-                        onRemove = { removingRule = it },
-                    )
+                        RuleList(
+                            state.view.rules,
+                            onToggle = { rule, on -> scope.launch { review(viewModel.setRuleEnabled(rule, on)) } },
+                            onRemove = { removingRule = it },
+                        )
 
-                    Label("Zones · ${state.view.zones.size}", Modifier.padding(start = 4.dp, top = 8.dp))
-                    state.view.zones.forEach { ZoneCard(it) }
+                        Label("Zones · ${state.view.zones.size}", Modifier.padding(horizontal = 4.dp))
+                        state.view.zones.forEach { ZoneCard(it) }
+                        Spacer(Modifier.height(76.dp))
+                    }
                 }
             }
         }
@@ -174,7 +214,7 @@ fun FirewallScreen(
                 TextButton(onClick = {
                     removingRule = null
                     scope.launch { review(viewModel.removeRule(rule)) }
-                }) { Text("Remove") }
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { removingRule = null }) { Text("Cancel") } },
         )
@@ -182,31 +222,38 @@ fun FirewallScreen(
     ApplySheet(applyViewModel)
 }
 
-/** Which forward the editor is open for; null inside means a new one. */
 private class ForwardEdit(val existing: PortForward?)
 
 @Composable
-private fun ForwardList(forwards: List<PortForward>, onToggle: (PortForward, Boolean) -> Unit, onEdit: (PortForward) -> Unit, onRemove: (PortForward) -> Unit) {
-    if (forwards.isEmpty()) return
-    ListCard {
+private fun ForwardList(
+    forwards: List<PortForward>,
+    onToggle: (PortForward, Boolean) -> Unit,
+    onEdit: (PortForward) -> Unit,
+    onRemove: (PortForward) -> Unit,
+) {
+    ListCard(label = "Port forwards · ${forwards.size}") {
         forwards.forEachIndexed { index, forward ->
             if (index > 0) RowDivider()
-            Column(Modifier.padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(forward.name, style = MaterialTheme.typography.bodyLarge)
-                        TagChip(forward.protocols.sorted().joinToString("/") { it.uppercase() })
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(forward.name, style = MaterialTheme.typography.titleSmall)
+                            TagChip(forward.protocols.sorted().joinToString("/") { it.uppercase() })
+                        }
                         MonoText(
                             "${forward.outsidePort} → ${forward.insideIp ?: "?"}${forward.insidePort?.let { ":$it" } ?: ""}",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3,
+                            maxLines = 2,
                         )
                     }
+                    IconButton(onClick = { onEdit(forward) }) {
+                        Icon(Icons.Outlined.Edit, contentDescription = "Edit ${forward.name}")
+                    }
+                    IconButton(onClick = { onRemove(forward) }) {
+                        Icon(Icons.Outlined.Delete, contentDescription = "Remove ${forward.name}", tint = MaterialTheme.colorScheme.error)
+                    }
                     Switch(checked = forward.enabled, onCheckedChange = { onToggle(forward, it) })
-                }
-                Row {
-                    TextButton(onClick = { onEdit(forward) }) { Text("Edit") }
-                    TextButton(onClick = { onRemove(forward) }) { Text("Remove") }
                 }
             }
         }
@@ -216,17 +263,25 @@ private fun ForwardList(forwards: List<PortForward>, onToggle: (PortForward, Boo
 @Composable
 private fun RuleList(rules: List<TrafficRule>, onToggle: (TrafficRule, Boolean) -> Unit, onRemove: (TrafficRule) -> Unit) {
     if (rules.isEmpty()) {
-        Text("No traffic rules.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SectionCard(label = "Traffic rules · 0") {
+            Text("No traffic rules.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         return
     }
-    ListCard {
+    ListCard(label = "Traffic rules · ${rules.size}") {
         rules.forEachIndexed { index, rule ->
             if (index > 0) RowDivider()
-            Row(Modifier.padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(rule.name, style = MaterialTheme.typography.bodyLarge)
+            Row(
+                Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(rule.name, style = MaterialTheme.typography.titleSmall)
                     Text(rule.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = { onRemove(rule) }) { Text("Remove") }
+                }
+                IconButton(onClick = { onRemove(rule) }) {
+                    Icon(Icons.Outlined.Delete, contentDescription = "Remove ${rule.name}", tint = MaterialTheme.colorScheme.error)
                 }
                 Switch(checked = rule.enabled, onCheckedChange = { onToggle(rule, it) })
             }
@@ -239,14 +294,14 @@ private fun RuleList(rules: List<TrafficRule>, onToggle: (TrafficRule, Boolean) 
 private fun ZoneCard(zone: Zone) {
     SectionCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(zone.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text(zone.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             if (zone.masq) TagChip("masquerade", tone = ChipTone.ACCENT)
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (zone.networks.isEmpty()) TagChip("no networks")
             zone.networks.forEach { TagChip(it) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             PolicyFigure("In", zone.input)
             PolicyFigure("Out", zone.output)
             PolicyFigure("Between", zone.forward)

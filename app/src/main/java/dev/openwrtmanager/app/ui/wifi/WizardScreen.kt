@@ -2,12 +2,12 @@ package dev.openwrtmanager.app.ui.wifi
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -15,7 +15,6 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,20 +22,27 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openwrtmanager.app.ui.apply.ApplySheet
 import dev.openwrtmanager.app.ui.apply.ApplyViewModel
+import dev.openwrtmanager.app.ui.kit.BannerCard
+import dev.openwrtmanager.app.ui.kit.BannerTone
+import dev.openwrtmanager.app.ui.kit.CheckboxListRow
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.SectionCard
+import dev.openwrtmanager.app.ui.kit.StateNotice
+import dev.openwrtmanager.app.ui.kit.SwitchListRow
+import dev.openwrtmanager.app.ui.network.PortRolesEditor
+import dev.openwrtmanager.app.ui.theme.MonoFamily
 import dev.openwrtmanager.app.wifi.BlockReason
 import dev.openwrtmanager.app.wifi.WizardKind
 import dev.openwrtmanager.app.wifi.label
@@ -70,80 +76,86 @@ fun WizardScreen(
                 .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val blocked = ui.blocked
             when {
-                ui.failed -> Notice(Icons.Default.WifiOff, "Could not read the device", "Go back and try again.")
-                !ui.loaded -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                ui.failed -> StateNotice(
+                    icon = Icons.Default.WifiOff,
+                    title = "Could not read the device",
+                    detail = "Go back and try again.",
+                    fillScreen = true,
+                )
+                !ui.loaded -> LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
                 blocked != null -> {
                     val (headline, detail) = blocked.explain()
-                    Notice(Icons.Default.Block, headline, detail)
+                    StateNotice(icon = Icons.Default.Block, title = headline, detail = detail, fillScreen = true)
                 }
                 else -> {
-                    Text(
-                        if (kind == WizardKind.GUEST) {
-                            "Visitors get internet access on their own network. They cannot reach your devices or the router's settings."
+                    BannerCard(
+                        text = if (kind == WizardKind.GUEST) {
+                            "Visitors get internet access on their own isolated network. They cannot reach your devices or router settings."
                         } else {
-                            "Smart home devices get their own network. They can reach the internet but cannot start connections to your devices."
+                            "Smart home devices get their own isolated network with internet access, unable to initiate connections to your LAN."
                         },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tone = BannerTone.INFO,
                     )
-                    OutlinedTextField(
-                        value = ui.ssid,
-                        onValueChange = viewModel::onSsid,
-                        label = { Text("Network name") },
-                        isError = ui.ssidError != null,
-                        supportingText = ui.ssidError?.let { { Text(it.text()) } },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = ui.key,
-                        onValueChange = viewModel::onKey,
-                        label = { Text("Password") },
-                        isError = ui.keyError != null,
-                        supportingText = { Text(ui.keyError?.text() ?: "Shown here so you can read it out. A join code follows.") },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
-                        trailingIcon = {
-                            IconButton(onClick = viewModel::regeneratePassword) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Make a new password")
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text("Bands", style = MaterialTheme.typography.labelLarge)
-                    ui.availableRadios.forEach { radio ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = radio.name in ui.radios, onCheckedChange = { viewModel.onRadio(radio.name, it) })
-                            Text(radio.band.label(), style = MaterialTheme.typography.bodyLarge)
+                    SectionCard(label = "Wi-Fi credentials") {
+                        OutlinedTextField(
+                            value = ui.ssid,
+                            onValueChange = viewModel::onSsid,
+                            label = { Text("Network name") },
+                            isError = ui.ssidError != null,
+                            supportingText = ui.ssidError?.let { { Text(it.text()) } },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = ui.key,
+                            onValueChange = viewModel::onKey,
+                            label = { Text("Password") },
+                            isError = ui.keyError != null,
+                            supportingText = { Text(ui.keyError?.text() ?: "Shown here so you can read it out. A join code follows.") },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = MonoFamily),
+                            trailingIcon = {
+                                IconButton(onClick = viewModel::regeneratePassword) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Make a new password")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    SectionCard(label = "Bands", contentPadding = false) {
+                        ui.availableRadios.forEachIndexed { index, radio ->
+                            if (index > 0) RowDivider()
+                            CheckboxListRow(
+                                title = radio.band.label(),
+                                checked = radio.name in ui.radios,
+                                onCheckedChange = { viewModel.onRadio(radio.name, it) },
+                            )
                         }
                     }
                     if (kind == WizardKind.IOT) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Let my devices reach IoT devices", style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    "Needed for apps that control lights, speakers or cameras from your phone at home.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Switch(checked = ui.lanCanReachIot, onCheckedChange = viewModel::onLanCanReachIot)
+                        SectionCard(label = "Access", contentPadding = false) {
+                            SwitchListRow(
+                                title = "Let my devices reach IoT devices",
+                                detail = "Needed for apps that control lights, speakers or cameras from your phone at home.",
+                                checked = ui.lanCanReachIot,
+                                onCheckedChange = viewModel::onLanCanReachIot,
+                            )
                         }
                     }
                     if (ui.ports.isNotEmpty()) {
-                        Text("Also on these ports", style = MaterialTheme.typography.labelLarge)
-                        Text(
-                            "Optional. A device port puts everything plugged into it on this network. An AP link carries it " +
-                                "tagged to an access point that understands VLANs. Leave ports on None to keep them on your home network.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        dev.openwrtmanager.app.ui.network.PortRolesEditor(ui.ports, ui.portRoles, viewModel::onPortRole)
+                        SectionCard(label = "Switch ports (optional)") {
+                            Text(
+                                "A device port puts everything plugged into it on this network. An AP link carries it tagged to an access point. Leave on None to keep ports on your home network.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            PortRolesEditor(ui.ports, ui.portRoles, viewModel::onPortRole)
+                        }
                     }
                     Button(
                         onClick = { viewModel.review()?.let { change -> applyViewModel.review(change) { viewModel.onApplied() } } },

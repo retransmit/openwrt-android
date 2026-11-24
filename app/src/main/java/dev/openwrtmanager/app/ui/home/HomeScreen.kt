@@ -1,11 +1,18 @@
 package dev.openwrtmanager.app.ui.home
 
+import android.content.res.Configuration
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,11 +21,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.QrCode2
@@ -27,15 +36,18 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,12 +55,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -58,19 +72,11 @@ import dev.openwrtmanager.app.domain.Band
 import dev.openwrtmanager.app.domain.Rate
 import dev.openwrtmanager.app.domain.SystemInfo
 import dev.openwrtmanager.app.ssh.SshError
+import dev.openwrtmanager.app.ui.common.flashUsedPercent
+import dev.openwrtmanager.app.ui.common.formatBytes
 import dev.openwrtmanager.app.ui.common.formatRate
 import dev.openwrtmanager.app.ui.common.formatUptime
 import dev.openwrtmanager.app.ui.common.memoryUsedPercent
-import dev.openwrtmanager.app.ui.theme.OpenWrtTheme
-import dev.openwrtmanager.app.ui.wifi.QrDialog
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.material3.Surface
-import androidx.compose.ui.unit.sp
-import dev.openwrtmanager.app.ui.common.flashUsedPercent
-import dev.openwrtmanager.app.ui.common.formatBytes
 import dev.openwrtmanager.app.ui.kit.IconBadge
 import dev.openwrtmanager.app.ui.kit.Label
 import dev.openwrtmanager.app.ui.kit.LiveMarker
@@ -78,9 +84,12 @@ import dev.openwrtmanager.app.ui.kit.MonoText
 import dev.openwrtmanager.app.ui.kit.Readout
 import dev.openwrtmanager.app.ui.kit.SectionCard
 import dev.openwrtmanager.app.ui.kit.StatTile
+import dev.openwrtmanager.app.ui.kit.StateNotice
 import dev.openwrtmanager.app.ui.kit.StatusDot
 import dev.openwrtmanager.app.ui.kit.TagChip
 import dev.openwrtmanager.app.ui.theme.LocalExtraColors
+import dev.openwrtmanager.app.ui.theme.OpenWrtTheme
+import dev.openwrtmanager.app.ui.wifi.QrDialog
 import java.util.Locale
 
 private const val GRAPH_SLOTS = 60
@@ -92,7 +101,6 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    // Poll only while this screen is actually on display.
     LaunchedEffect(viewModel, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.poll() }
     }
@@ -111,35 +119,75 @@ fun HomeContent(
     onAddDevice: () -> Unit,
     onShowQr: (String) -> Unit = {},
 ) {
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
+                scrollBehavior = scrollBehavior,
                 title = {
-                    Column {
-                        Text(
-                            ui.deviceName.ifEmpty { "OpenWrt Manager" },
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (ui.status != HomeStatus.NoDevice) StatusLine(ui.status, ui.responseMs)
+                    if (ui.status == HomeStatus.NoDevice) {
+                        Text("OpenWrt Manager")
+                    } else {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable(onClick = onSwitchDevice),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                StatusDotFor(ui.status)
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            ui.deviceName.ifEmpty { "Device" },
+                                            style = MaterialTheme.typography.titleMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.widthIn(max = 180.dp),
+                                        )
+                                        Spacer(Modifier.width(2.dp))
+                                        Icon(
+                                            Icons.Default.KeyboardArrowDown,
+                                            contentDescription = "Switch device",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    StatusLine(ui.status, ui.responseMs)
+                                }
+                            }
+                        }
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = onSwitchDevice,
-                        modifier = Modifier
-                            .padding(end = 8.dp)
-                            .size(36.dp)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small),
-                    ) {
-                        Icon(Icons.Default.SwapHoriz, contentDescription = "Switch device", modifier = Modifier.size(20.dp))
+                    if (ui.status != HomeStatus.NoDevice) {
+                        FilledTonalIconButton(
+                            onClick = onSwitchDevice,
+                            modifier = Modifier.padding(end = 8.dp),
+                        ) {
+                            Icon(Icons.Default.SwapHoriz, contentDescription = "Switch device")
+                        }
                     }
                 },
             )
         },
     ) { padding ->
         if (ui.status == HomeStatus.NoDevice) {
-            NoDevice(onAddDevice, Modifier.padding(padding))
+            StateNotice(
+                icon = Icons.Default.Router,
+                title = "No device selected",
+                detail = "Add an OpenWrt router or access point to see live speeds, connected clients, and Wi-Fi status.",
+                actionLabel = "Add device",
+                onAction = onAddDevice,
+                modifier = Modifier.padding(padding),
+                fillScreen = true,
+            )
             return@Scaffold
         }
         PullToRefreshBox(
@@ -152,17 +200,18 @@ fun HomeContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 (ui.status as? HomeStatus.Offline)?.let { OfflineCard(it.error, onRefresh) }
                 if (!ui.loaded) {
-                    if (ui.status !is HomeStatus.Offline) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if (ui.status !is HomeStatus.Offline) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
+                    }
                 } else {
-                    // Last known values stay visible but dimmed while the device is unreachable.
                     Column(
-                        modifier = Modifier.alpha(if (stale) 0.5f else 1f),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.alpha(if (stale) 0.55f else 1f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         if (ui.uplinkPresent) SpeedCard(ui.rate, ui.history) else NoUplinkCard()
                         StatsGrid(ui)
@@ -176,47 +225,70 @@ fun HomeContent(
 }
 
 @Composable
-private fun StatusLine(status: HomeStatus, responseMs: Long?) {
+private fun StatusDotFor(status: HomeStatus) {
     val extra = LocalExtraColors.current
-    val (label, color) = when (status) {
-        HomeStatus.Online -> "Online" to extra.online
-        HomeStatus.Connecting -> "Connecting" to MaterialTheme.colorScheme.outline
-        is HomeStatus.Offline -> "Offline" to MaterialTheme.colorScheme.error
-        HomeStatus.NoDevice -> "" to Color.Transparent
+    val color = when (status) {
+        HomeStatus.Online -> extra.online
+        HomeStatus.Connecting -> MaterialTheme.colorScheme.outline
+        is HomeStatus.Offline -> MaterialTheme.colorScheme.error
+        HomeStatus.NoDevice -> Color.Transparent
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        StatusDot(color, glow = status == HomeStatus.Online)
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    StatusDot(color, glow = status == HomeStatus.Online)
+}
+
+@Composable
+private fun StatusLine(status: HomeStatus, responseMs: Long?) {
+    val label = when (status) {
+        HomeStatus.Online -> "Online"
+        HomeStatus.Connecting -> "Connecting..."
+        is HomeStatus.Offline -> "Offline"
+        HomeStatus.NoDevice -> ""
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (status == HomeStatus.Online && responseMs != null) {
-            MonoText("· $responseMs ms", color = MaterialTheme.colorScheme.onSurfaceVariant, size = 11.sp)
+            MonoText("· $responseMs ms", color = MaterialTheme.colorScheme.onSurfaceVariant, size = 10.sp)
         }
     }
 }
 
-/** "42.3 Mbps" split into the number and its unit, for a readout. */
 private fun rateParts(bps: Long): Pair<String, String> = formatRate(bps).let { it.substringBefore(' ') to it.substringAfter(' ') }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SpeedCard(rate: Rate?, history: List<Rate>) {
     SectionCard(label = "Internet", trailing = { LiveMarker() }, glow = true) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             SpeedFigure(Icons.Default.ArrowDownward, "Download", rate?.downBps, MaterialTheme.colorScheme.primary)
             SpeedFigure(Icons.Default.ArrowUpward, "Upload", rate?.upBps, MaterialTheme.colorScheme.tertiary)
         }
-        RateGraph(history, slots = GRAPH_SLOTS, modifier = Modifier.fillMaxWidth().height(96.dp))
+        RateGraph(history, slots = GRAPH_SLOTS, modifier = Modifier.fillMaxWidth().height(112.dp))
     }
 }
 
 @Composable
 private fun SpeedFigure(icon: ImageVector, label: String, bps: Long?, tint: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
-        if (bps == null) {
-            Text("measuring", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            val (value, unit) = rateParts(bps)
-            Readout(value, unit = unit, color = tint, size = 24.sp)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(tint.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(16.dp))
+        }
+        Column {
+            Label(label)
+            if (bps == null) {
+                Text("measuring...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                val (value, unit) = rateParts(bps)
+                Readout(value, unit = unit, color = tint, size = 24.sp)
+            }
         }
     }
 }
@@ -224,13 +296,13 @@ private fun SpeedFigure(icon: ImageVector, label: String, bps: Long?, tint: Colo
 @Composable
 private fun NoUplinkCard() {
     SectionCard(label = "Internet") {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             IconBadge(Icons.Default.CloudOff)
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("No internet connection detected", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "This device is not routing an internet connection right now (for example it is an access point, or the WAN is down), so there is no link speed to show.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    "This device is acting as an access point or its WAN is down, so link speed is unavailable.",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -241,7 +313,7 @@ private fun NoUplinkCard() {
 @Composable
 private fun StatsGrid(ui: HomeUi) {
     val system = ui.system
-    val gap = Arrangement.spacedBy(8.dp)
+    val gap = Arrangement.spacedBy(10.dp)
     Column(verticalArrangement = gap) {
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = gap) {
             StatTile("Uptime", system?.let { formatUptime(it.uptimeSeconds) } ?: "?", Modifier.weight(2f).fillMaxHeight())
@@ -277,11 +349,14 @@ private fun WifiCard(wifi: List<WifiRow>, onShowQr: (String) -> Unit) {
             )
         }
         wifi.forEachIndexed { index, row ->
-            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
             Row(
-                modifier = Modifier.fillMaxWidth().alpha(if (row.up) 1f else 0.5f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp)
+                    .alpha(if (row.up) 1f else 0.5f),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 IconBadge(
                     if (row.up) Icons.Default.Wifi else Icons.Default.WifiOff,
@@ -291,7 +366,7 @@ private fun WifiCard(wifi: List<WifiRow>, onShowQr: (String) -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             row.ssid.ifEmpty { "(no name)" },
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MaterialTheme.typography.titleSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false),
@@ -303,19 +378,19 @@ private fun WifiCard(wifi: List<WifiRow>, onShowQr: (String) -> Unit) {
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         row.bands.forEach { band -> TagChip(band.label()) }
                     }
                 }
-                IconButton(
+                FilledTonalIconButton(
                     onClick = { onShowQr(row.ssid) },
-                    modifier = Modifier.size(34.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small),
+                    modifier = Modifier.size(38.dp),
                 ) {
-                    Icon(Icons.Default.QrCode2, contentDescription = "Show join code for ${row.ssid}", modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.QrCode2, contentDescription = "Show join code for ${row.ssid}", modifier = Modifier.size(20.dp))
                 }
-                Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 44.dp)) {
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 42.dp)) {
                     Readout("${row.clients}", size = 16.sp)
-                    Label(if (row.clients == 1) "device" else "devices")
+                    Label(if (row.clients == 1) "client" else "clients")
                 }
             }
         }
@@ -344,34 +419,20 @@ private fun OfflineCard(error: Throwable, onRetry: () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.errorContainer,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
             Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-            Button(onClick = onRetry) { Text("Try now") }
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
+            ) { Text("Try now") }
         }
-    }
-}
-
-@Composable
-private fun NoDevice(onAddDevice: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxSize().padding(32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(Icons.Default.Router, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
-        Text("No device selected", style = MaterialTheme.typography.titleLarge)
-        Text(
-            "Add an OpenWrt router or access point to see its status here.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.width(1.dp))
-        Button(onClick = onAddDevice) { Text("Add device") }
     }
 }
 
@@ -408,18 +469,6 @@ private fun HomeNoUplinkPreview() = OpenWrtTheme {
     HomeContent(previewUi.copy(uplinkPresent = false, rate = null, history = emptyList()), {}, {}, {})
 }
 
-@Preview(name = "Home dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "Home dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun HomeDarkPreview() = OpenWrtTheme { HomeContent(previewUi, {}, {}, {}) }
-
-@Preview(name = "Home long names, no flash")
-@Composable
-private fun HomeEdgePreview() = OpenWrtTheme {
-    HomeContent(
-        previewUi.copy(
-            wifi = listOf(WifiRow("A-very-long-network-name-1234567", listOf(Band.GHZ_2_4, Band.GHZ_5, Band.GHZ_6), true, true, 128)),
-            system = previewUi.system?.copy(flashTotalBytes = null, flashUsedBytes = null),
-        ),
-        {}, {}, {},
-    )
-}

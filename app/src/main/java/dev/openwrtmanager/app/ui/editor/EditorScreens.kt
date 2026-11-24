@@ -3,37 +3,39 @@ package dev.openwrtmanager.app.ui.editor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
-import androidx.compose.ui.unit.sp
-import dev.openwrtmanager.app.ui.kit.MonoText
-import dev.openwrtmanager.app.ui.theme.MonoFamily
-import dev.openwrtmanager.app.ui.kit.SectionCard as KitSectionCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,18 +45,29 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openwrtmanager.app.editor.EditorEdit
 import dev.openwrtmanager.app.editor.ItemState
-import dev.openwrtmanager.app.editor.isSecretOption
 import dev.openwrtmanager.app.editor.OptionView
 import dev.openwrtmanager.app.editor.SectionView
+import dev.openwrtmanager.app.editor.isSecretOption
 import dev.openwrtmanager.app.editor.stagedView
 import dev.openwrtmanager.app.ui.apply.ApplySheet
 import dev.openwrtmanager.app.ui.apply.ApplyViewModel
+import dev.openwrtmanager.app.ui.kit.BannerCard
+import dev.openwrtmanager.app.ui.kit.BannerTone
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.ListCard
+import dev.openwrtmanager.app.ui.kit.ListRow
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.SwitchListRow
+import dev.openwrtmanager.app.ui.kit.TagChip
+import dev.openwrtmanager.app.ui.kit.SectionCard as KitSectionCard
+import dev.openwrtmanager.app.ui.theme.MonoFamily
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,33 +75,43 @@ import kotlinx.coroutines.launch
 fun ConfigListScreen(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: EditorViewModel = hiltViewModel()) {
     LaunchedEffect(viewModel) { viewModel.loadConfigs() }
     val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
+            MediumTopAppBar(
                 title = { Text("Config editor") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                scrollBehavior = scrollBehavior,
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            if (ui.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (ui.offline) Text("Connect to a device on the Home tab first.", Modifier.padding(16.dp))
-            Text(
-                "Every setting on the device, file by file. Changes are reviewed and go through the undo timer.",
-                Modifier.padding(16.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            LazyColumn {
-                items(ui.configs) { name ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable { onOpen(name) }.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        MonoText(name, Modifier.weight(1f), size = 15.sp)
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            if (ui.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape)) }
+            if (ui.offline) item { BannerCard(text = "Connect to a device on the Home tab first.", tone = BannerTone.INFO) }
+            item {
+                BannerCard(
+                    text = "Every UCI config file on the device. Changes are staged locally, reviewed, and protected by the 90s undo timer.",
+                    tone = BannerTone.INFO,
+                )
+            }
+            if (ui.configs.isNotEmpty()) {
+                item {
+                    ListCard(label = "Config files · ${ui.configs.size}") {
+                        ui.configs.forEachIndexed { index, name ->
+                            if (index > 0) RowDivider()
+                            ListRow(
+                                title = name,
+                                icon = Icons.Outlined.Description,
+                                onClick = { onOpen(name) },
+                            )
+                        }
                     }
-                    HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
         }
@@ -96,7 +119,6 @@ fun ConfigListScreen(onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: Ed
     ui.message?.let { MessageDialog(it, viewModel::clearMessage) }
 }
 
-/** What an option dialog is editing. */
 private data class OptionTarget(val section: String, val option: String?, val value: String, val isList: Boolean)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,25 +144,43 @@ fun ConfigEditScreen(
             )
         },
         floatingActionButton = {
-            if (ui.config != null) ExtendedFloatingActionButton(onClick = { addingSection = true }, icon = { Icon(Icons.Default.Add, null) }, text = { Text("Add section") })
+            if (ui.config != null) {
+                ExtendedFloatingActionButton(
+                    onClick = { addingSection = true },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Add section") },
+                )
+            }
         },
         bottomBar = {
             if (ui.edits.isNotEmpty()) {
-                BottomAppBar {
-                    TextButton(onClick = { showStaged = true }) { Text("${ui.edits.size} staged") }
-                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
+                BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                    FilledTonalButton(onClick = { showStaged = true }, modifier = Modifier.padding(start = 8.dp)) {
+                        Text("${ui.edits.size} staged")
+                    }
+                    Row(
+                        Modifier.weight(1f).padding(end = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         TextButton(onClick = viewModel::discard) { Text("Discard") }
-                        Button(onClick = { scope.launch { viewModel.review()?.let { applyViewModel.review(it) { viewModel.applied() } } } }) { Text("Review") }
+                        Button(onClick = { scope.launch { viewModel.review()?.let { applyViewModel.review(it) { viewModel.applied() } } } }) {
+                            Text("Review")
+                        }
                     }
                 }
             }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            if (ui.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (ui.loading) LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
             val config = ui.config?.takeIf { it.name == name }
             val sections = remember(config, ui.edits) { config?.let { stagedView(it, ui.edits) }.orEmpty() }
-            LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 items(sections, key = { it.name }) { section ->
                     SectionCard(
                         section = section,
@@ -149,7 +189,6 @@ fun ConfigEditScreen(
                         onRemove = { viewModel.stage(EditorEdit.DeleteSection(section.name)) },
                     )
                 }
-                item { Text("", Modifier.padding(bottom = 80.dp)) }
             }
         }
     }
@@ -176,7 +215,7 @@ fun ConfigEditScreen(
             onDismissRequest = { showStaged = false },
             title = { Text("Staged changes") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ui.edits.forEachIndexed { index, edit ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(describe(edit), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, fontFamily = MonoFamily)
@@ -200,36 +239,46 @@ private fun SectionCard(
     onRemove: () -> Unit,
 ) {
     val removed = section.state == ItemState.REMOVED
-    KitSectionCard(Modifier.padding(horizontal = 16.dp)) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(section.type, style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        section.name + if (section.anonymous) " (unnamed)" else "",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = MonoFamily,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+    KitSectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(section.type, style = MaterialTheme.typography.titleMedium)
                     when (section.state) {
-                        ItemState.ADDED -> Text("New section", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        ItemState.REMOVED -> Text("Will be removed", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                        ItemState.ADDED -> TagChip("New", tone = ChipTone.ACCENT)
+                        ItemState.REMOVED -> TagChip("Removed", tone = ChipTone.ERROR)
                         else -> Unit
                     }
                 }
-                if (!removed) TextButton(onClick = onRemove) { Text("Remove") }
+                Text(
+                    section.name + if (section.anonymous) " (unnamed)" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = MonoFamily,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            section.options.forEach { option ->
-                OptionRow(option, enabled = !removed) { onEdit(option.option, option.editValue, option.isList) }
+            if (!removed) {
+                IconButton(onClick = onRemove) {
+                    Icon(Icons.Outlined.Delete, contentDescription = "Remove section", tint = MaterialTheme.colorScheme.error)
+                }
             }
-            if (!removed) TextButton(onClick = onAddOption) { Text("Add option") }
+        }
+        section.options.forEachIndexed { index, option ->
+            if (index > 0) RowDivider()
+            OptionRow(option, enabled = !removed) { onEdit(option.option, option.editValue, option.isList) }
+        }
+        if (!removed) {
+            TextButton(onClick = onAddOption) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.width(4.dp))
+                Text("Add option")
+            }
         }
     }
 }
 
 @Composable
 private fun OptionRow(option: OptionView, enabled: Boolean, onClick: () -> Unit) {
-    // Passwords and keys stay hidden in the list; opening the option shows the value to edit it.
     fun shown(value: String?) = if (isSecretOption(option.option)) "(hidden)" else value
     val text = when (option.state) {
         ItemState.SAME -> shown(option.new)
@@ -242,7 +291,10 @@ private fun OptionRow(option: OptionView, enabled: Boolean, onClick: () -> Unit)
         ItemState.REMOVED -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.primary
     }
-    Row(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(vertical = 6.dp)) {
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Text(option.option, Modifier.weight(0.4f), fontFamily = MonoFamily, style = MaterialTheme.typography.bodyMedium)
         Text(text, Modifier.weight(0.6f), fontFamily = MonoFamily, style = MaterialTheme.typography.bodyMedium, color = color)
     }
@@ -260,16 +312,18 @@ private fun OptionDialog(target: OptionTarget, onDismiss: () -> Unit, onRemove: 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (target.option == null) {
                     OutlinedTextField(option, { option = it.trim() }, label = { Text("Option name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("A list (one value per line)", Modifier.weight(1f))
-                        Switch(checked = isList, onCheckedChange = { isList = it })
-                    }
+                    SwitchListRow(
+                        title = "List (one value per line)",
+                        checked = isList,
+                        onCheckedChange = { isList = it },
+                    )
                 }
                 if (!isList && (value == "0" || value == "1")) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("On", Modifier.weight(1f))
-                        Switch(checked = value == "1", onCheckedChange = { value = if (it) "1" else "0" })
-                    }
+                    SwitchListRow(
+                        title = "Enabled",
+                        checked = value == "1",
+                        onCheckedChange = { value = if (it) "1" else "0" },
+                    )
                 }
                 OutlinedTextField(
                     value,
@@ -282,11 +336,10 @@ private fun OptionDialog(target: OptionTarget, onDismiss: () -> Unit, onRemove: 
                 )
             }
         },
-        // An empty single value would make uci delete the option; Remove says that honestly.
         confirmButton = { TextButton(enabled = option.isNotEmpty() && (isList || value.isNotEmpty()), onClick = { onSave(option, value, isList) }) { Text("Stage") } },
         dismissButton = {
             Row {
-                if (target.option != null) TextButton(onClick = onRemove) { Text("Remove") }
+                if (target.option != null) TextButton(onClick = onRemove) { Text("Remove", color = MaterialTheme.colorScheme.error) }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         },
@@ -301,7 +354,7 @@ private fun SectionDialog(onDismiss: () -> Unit, onSave: (String, String) -> Uni
         onDismissRequest = onDismiss,
         title = { Text("Add section") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(type, { type = it.trim() }, label = { Text("Type, for example rule") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(name, { name = it.trim() }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }

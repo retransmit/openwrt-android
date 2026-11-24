@@ -5,39 +5,46 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.ui.unit.sp
-import dev.openwrtmanager.app.ui.kit.ChipTone
-import dev.openwrtmanager.app.ui.kit.MonoText
-import dev.openwrtmanager.app.ui.kit.SectionCard
-import dev.openwrtmanager.app.ui.kit.TagChip
-import dev.openwrtmanager.app.ui.theme.MonoFamily
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,14 +55,24 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openwrtmanager.app.admin.MAX_BACKUP_BYTES
 import dev.openwrtmanager.app.admin.Package
 import dev.openwrtmanager.app.admin.removalAllowed
+import dev.openwrtmanager.app.ui.kit.BannerCard
+import dev.openwrtmanager.app.ui.kit.BannerTone
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.MonoText
+import dev.openwrtmanager.app.ui.kit.SectionCard
+import dev.openwrtmanager.app.ui.kit.TagChip
+import dev.openwrtmanager.app.ui.theme.MonoFamily
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,11 +80,14 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Screen(title: String, onBack: () -> Unit, content: @Composable (Modifier) -> Unit) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
+            MediumTopAppBar(
                 title = { Text(title) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                scrollBehavior = scrollBehavior,
             )
         },
     ) { padding -> content(Modifier.fillMaxSize().padding(padding)) }
@@ -89,19 +109,58 @@ fun PackagesScreen(onBack: () -> Unit, viewModel: PackagesViewModel = hiltViewMo
                 Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Find") })
             }
             if (ui.loading || ui.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (ui.offline) Text("Connect to a device on the Home tab first.", Modifier.padding(16.dp))
+            if (ui.offline) {
+                BannerCard(
+                    text = "Connect to a device on the Home tab first.",
+                    tone = BannerTone.INFO,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
             ui.output?.let { output -> OutputCard(output, onClose = viewModel::clearOutput) }
             if (tab == 0) {
-                OutlinedTextField(ui.filter, viewModel::setFilter, label = { Text("Filter") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(16.dp))
+                OutlinedTextField(
+                    value = ui.filter,
+                    onValueChange = viewModel::setFilter,
+                    placeholder = { Text("Filter installed packages") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (ui.filter.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.setFilter("") }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear filter")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = CircleShape,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        unfocusedBorderColor = Color.Transparent,
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                )
                 PackageList(ui.visible, action = "Remove") { confirm = it to false }
             } else {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(query, { query = it }, label = { Text("Package name") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text("Package name") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
+                        shape = CircleShape,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            unfocusedBorderColor = Color.Transparent,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
                     Button(enabled = !ui.busy, onClick = { viewModel.search(query) }) { Text("Search") }
                 }
                 Text(
-                    "Searching downloads the package list, so the device needs internet.",
-                    Modifier.padding(horizontal = 16.dp),
+                    "Searching refreshes the package index, so the device needs internet access.",
+                    Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -126,46 +185,61 @@ fun PackagesScreen(onBack: () -> Unit, viewModel: PackagesViewModel = hiltViewMo
                 TextButton(onClick = {
                     confirm = null
                     if (installing) viewModel.install(pkg.name) else viewModel.remove(pkg.name)
-                }) { Text(if (installing) "Install" else "Remove") }
+                }) {
+                    Text(
+                        if (installing) "Install" else "Remove",
+                        color = if (installing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                }
             },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
         )
     }
 }
 
-/** Scrollable and capped, opening at the end, where package managers print their summary and errors. */
 @Composable
 private fun OutputCard(output: String, onClose: () -> Unit) {
     val scroll = rememberScrollState()
     LaunchedEffect(output) { scroll.scrollTo(scroll.maxValue) }
-    SectionCard(Modifier.padding(16.dp), label = "Output") {
-        Text(
-            output.ifBlank { "(no output)" },
-            Modifier.heightIn(max = 180.dp).verticalScroll(scroll),
-            fontFamily = MonoFamily,
-            fontSize = 11.sp,
-            lineHeight = 15.sp,
-        )
+    SectionCard(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), label = "Output") {
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                output.ifBlank { "(no output)" },
+                Modifier.heightIn(max = 180.dp).verticalScroll(scroll).padding(12.dp),
+                fontFamily = MonoFamily,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+            )
+        }
         TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) { Text("Close") }
     }
 }
 
 @Composable
 private fun PackageList(packages: List<Package>, action: String, onAction: (Package) -> Unit) {
-    LazyColumn {
+    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
         items(packages, key = { it.name + " " + it.version }) { pkg ->
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     MonoText(pkg.name, size = 14.sp)
                     MonoText(pkg.version, color = MaterialTheme.colorScheme.onSurfaceVariant, size = 11.sp)
                 }
                 when {
                     action == "Install" && pkg.installed -> TagChip("Installed", tone = ChipTone.OK)
                     action == "Remove" && !removalAllowed(pkg.name) -> TagChip("Needed")
-                    else -> TextButton(onClick = { onAction(pkg) }) { Text(action) }
+                    action == "Install" -> FilledTonalButton(onClick = { onAction(pkg) }) { Text(action) }
+                    else -> TextButton(onClick = { onAction(pkg) }) { Text(action, color = MaterialTheme.colorScheme.error) }
                 }
             }
-            HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
         }
     }
 }
@@ -185,7 +259,6 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
         scope.launch {
             note = withContext(Dispatchers.IO) {
                 if (bytes == null) {
-                    // The picker already created the file; never leave an empty "backup" behind.
                     runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
                     "The backup was lost before it could be saved. Download it again."
                 } else {
@@ -216,20 +289,34 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
     }
 
     Screen("Backup", onBack) { modifier ->
-        Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (ui.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            SectionCard(label = "Save") {
-                Text("Save the device's settings to this phone.", style = MaterialTheme.typography.bodyMedium)
-                Button(enabled = !ui.busy && ui.hostname != null, onClick = viewModel::download, modifier = Modifier.fillMaxWidth()) { Text("Download backup") }
+        Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (ui.busy) LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
+            SectionCard(label = "Save", glow = true) {
+                Text("Download a sysupgrade archive of this device's configuration to your phone.", style = MaterialTheme.typography.bodyMedium)
+                Button(enabled = !ui.busy && ui.hostname != null, onClick = viewModel::download, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.CloudDownload, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Download backup")
+                }
             }
             SectionCard(label = "Restore") {
-                Text(
-                    "Restoring replaces every setting on the device with the ones in the file, including its root password and SSH keys, and reboots it. It cannot be undone.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                BannerCard(
+                    text = "Restoring replaces every setting on the device, including root password and SSH keys, then reboots. It cannot be undone.",
+                    icon = Icons.Default.Warning,
+                    tone = BannerTone.WARNING,
                 )
-                OutlinedButton(enabled = !ui.busy && ui.hostname != null, onClick = { opener.launch(arrayOf("application/gzip", "application/x-gzip", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Restore from a backup")
+                FilledTonalButton(
+                    enabled = !ui.busy && ui.hostname != null,
+                    onClick = { opener.launch(arrayOf("application/gzip", "application/x-gzip", "application/octet-stream")) },
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Restore, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Restore from backup")
                 }
             }
         }
@@ -239,19 +326,24 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
             onDismissRequest = viewModel::cancelRestore,
             title = { Text("Restore ${ui.hostname}?") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("This backup was taken from: ${pending.backupHostname ?: "an unknown device"}.")
                     if (pending.otherDevice) {
-                        Text(
-                            "That is not this device. Its network settings, addresses, root password and SSH keys would replace this device's, and it may not be reachable after the reboot.",
-                            color = MaterialTheme.colorScheme.error,
+                        BannerCard(
+                            text = "That is not this device. Its network settings, root password and SSH keys would overwrite this device and may lock you out.",
+                            icon = Icons.Default.Warning,
+                            tone = BannerTone.ERROR,
                         )
                     }
-                    Text("Every setting is replaced, including the root password and SSH keys, then the device reboots. This cannot be undone. Type ${ui.hostname} to confirm.")
+                    Text("Type ${ui.hostname} to confirm.")
                     OutlinedTextField(typed, { typed = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
             },
-            confirmButton = { TextButton(enabled = typed == ui.hostname && !ui.busy, onClick = { viewModel.confirmRestore(typed) }) { Text("Restore") } },
+            confirmButton = {
+                TextButton(enabled = typed == ui.hostname && !ui.busy, onClick = { viewModel.confirmRestore(typed) }) {
+                    Text("Restore", color = MaterialTheme.colorScheme.error)
+                }
+            },
             dismissButton = { TextButton(onClick = viewModel::cancelRestore) { Text("Cancel") } },
         )
     }

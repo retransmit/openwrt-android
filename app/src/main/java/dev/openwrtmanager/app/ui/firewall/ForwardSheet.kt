@@ -10,15 +10,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +34,12 @@ import androidx.compose.ui.unit.dp
 import dev.openwrtmanager.app.clients.Client
 import dev.openwrtmanager.app.firewall.ForwardInput
 import dev.openwrtmanager.app.firewall.PortForward
+import dev.openwrtmanager.app.ui.kit.BannerCard
+import dev.openwrtmanager.app.ui.kit.BannerTone
+import dev.openwrtmanager.app.ui.kit.Label
+import dev.openwrtmanager.app.ui.kit.MonoText
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.SectionCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,8 +53,11 @@ internal fun ForwardSheet(existing: PortForward?, clients: List<Client>, onDismi
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
-            Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(if (existing == null) "Add port forward" else "Change port forward", style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -53,45 +65,70 @@ internal fun ForwardSheet(existing: PortForward?, clients: List<Client>, onDismi
                 FilterChip(selected = tcp, onClick = { tcp = !tcp }, label = { Text("TCP") })
                 FilterChip(selected = udp, onClick = { udp = !udp }, label = { Text("UDP") })
             }
-            OutlinedTextField(
-                outside, { outside = it.trim() }, label = { Text("Outside port or range") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                inside, { inside = it.trim() }, label = { Text("Inside port (empty: same)") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(),
-            )
-            Text("To device", style = MaterialTheme.typography.labelLarge)
-            if (existing != null && clients.none { it.ip == existing.insideIp }) {
-                Text(
-                    "This forward points to ${existing.insideIp ?: "no address"}, which matches no device listed here. Pick the device it should go to.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    outside,
+                    { outside = it.trim() },
+                    label = { Text("Outside port") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    inside,
+                    { inside = it.trim() },
+                    label = { Text("Inside (optional)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
                 )
             }
-            if (clients.isEmpty()) Text("No devices with an address are connected right now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            clients.forEach { client ->
-                Row(Modifier.fillMaxWidth().clickable { target = client }, verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = target?.mac == client.mac, onClick = { target = client })
-                    Column {
-                        Text(client.name ?: "Unknown device", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            listOfNotNull(client.ip, "reserved".takeIf { client.reserved }).joinToString(", "),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+            Label("Target device")
+            if (existing != null && clients.none { it.ip == existing.insideIp }) {
+                BannerCard(
+                    text = "This forward points to ${existing.insideIp ?: "no address"}, which matches no listed device. Pick the target device below.",
+                    icon = Icons.Default.Warning,
+                    tone = BannerTone.ERROR,
+                )
+            }
+            SectionCard(contentPadding = false) {
+                if (clients.isEmpty()) {
+                    Text(
+                        "No devices with an address are connected right now.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+                clients.forEachIndexed { index, client ->
+                    if (index > 0) RowDivider()
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { target = client }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        RadioButton(selected = target?.mac == client.mac, onClick = { target = client })
+                        Column {
+                            Text(client.name ?: "Unknown device", style = MaterialTheme.typography.bodyLarge)
+                            MonoText(
+                                listOfNotNull(client.ip, "reserved".takeIf { client.reserved }).joinToString(" · "),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
             target?.takeIf { !it.reserved }?.let {
-                Text(
-                    "${it.name ?: "This device"} will also get its address reserved, so the forward keeps working.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                BannerCard(
+                    text = "${it.name ?: "This device"} will also get its IP address reserved so the forward keeps working.",
+                    icon = Icons.Default.Info,
+                    tone = BannerTone.INFO,
                 )
             }
-            Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+            Row(Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)) {
+                OutlinedButton(onClick = onDismiss) { Text("Cancel") }
                 Button(
                     enabled = target != null && name.isNotBlank() && outside.isNotEmpty(),
                     onClick = {

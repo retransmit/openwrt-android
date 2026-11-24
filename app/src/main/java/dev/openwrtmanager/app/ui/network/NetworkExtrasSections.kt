@@ -6,15 +6,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
-import androidx.compose.ui.unit.sp
-import dev.openwrtmanager.app.ui.kit.ChipTone
-import dev.openwrtmanager.app.ui.kit.Label
-import dev.openwrtmanager.app.ui.kit.ListCard
-import dev.openwrtmanager.app.ui.kit.MonoText
-import dev.openwrtmanager.app.ui.kit.RowDivider
-import dev.openwrtmanager.app.ui.kit.TagChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,10 +27,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.openwrtmanager.app.apply.ChangeSet
 import dev.openwrtmanager.app.clients.Pool
 import dev.openwrtmanager.app.clients.Reservation
 import dev.openwrtmanager.app.ui.clients.duration
+import dev.openwrtmanager.app.ui.kit.ChipTone
+import dev.openwrtmanager.app.ui.kit.Label
+import dev.openwrtmanager.app.ui.kit.ListCard
+import dev.openwrtmanager.app.ui.kit.MonoText
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.SectionCard
+import dev.openwrtmanager.app.ui.kit.TagChip
 
 /** Interfaces, then (after the VLANs) reservations, with their edit dialogs. */
 @Composable
@@ -39,30 +46,33 @@ internal fun InterfacesSection(state: ExtrasUi.Ready, onEditPool: (Pool) -> Unit
     ListCard(label = "Interfaces") {
         state.interfaces.forEachIndexed { index, row ->
             if (index > 0) RowDivider()
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val s = row.status
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    Text(s.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                     TagChip(if (s.up) "Up" else "Down", tone = if (s.up) ChipTone.OK else ChipTone.ERROR)
                 }
                 MonoText(
-                    listOfNotNull(s.proto.ifEmpty { null }, s.ipv4, s.uptimeSeconds?.let { "up ${duration(it)}" }).joinToString(" \u00B7 "),
+                    listOfNotNull(s.proto.ifEmpty { null }, s.ipv4, s.uptimeSeconds?.let { "up ${duration(it)}" }).joinToString(" · "),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                 )
                 if (s.rxBytes != null && s.txBytes != null) {
-                    MonoText("\u2193 ${bytes(s.rxBytes)}  \u2191 ${bytes(s.txBytes)}", color = MaterialTheme.colorScheme.onSurfaceVariant, size = 11.sp)
+                    MonoText("↓ ${bytes(s.rxBytes)}   ↑ ${bytes(s.txBytes)}", color = MaterialTheme.colorScheme.onSurfaceVariant, size = 11.sp)
                 }
                 row.pool?.let { pool ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         MonoText(
-                            "DHCP ${pool.limit} from .${pool.start} \u00B7 lease ${pool.leasetime}",
+                            "DHCP ${pool.limit} from .${pool.start} · lease ${pool.leasetime}",
                             Modifier.weight(1f),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             size = 11.sp,
                             maxLines = 2,
                         )
-                        TextButton(onClick = { onEditPool(pool) }) { Text("Edit") }
+                        FilledTonalButton(onClick = { onEditPool(pool) }) {
+                            Icon(Icons.Outlined.Tune, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                            Text("Pool")
+                        }
                     }
                 }
             }
@@ -73,24 +83,32 @@ internal fun InterfacesSection(state: ExtrasUi.Ready, onEditPool: (Pool) -> Unit
 @Composable
 internal fun ReservationsSection(state: ExtrasUi.Ready, onEdit: (Reservation) -> Unit, onRemove: (Reservation) -> Unit) {
     if (state.reservations.isEmpty()) {
-        Label("Address reservations", Modifier.padding(start = 4.dp))
-        Text(
-            "None yet. Reserve an address from a device on the Clients tab.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        SectionCard(label = "Address reservations") {
+            Text(
+                "None yet. Reserve an address from a device on the Clients tab.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         return
     }
-    ListCard(label = "Address reservations") {
+    ListCard(label = "Address reservations · ${state.reservations.size}") {
         state.reservations.forEachIndexed { index, reservation ->
             if (index > 0) RowDivider()
-            Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+            Row(
+                Modifier.padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(reservation.name ?: "Unnamed", style = MaterialTheme.typography.bodyLarge)
-                    MonoText("${reservation.ip ?: "no address"} \u00B7 ${reservation.mac}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    MonoText("${reservation.ip ?: "no address"} · ${reservation.mac}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = { onEdit(reservation) }) { Text("Edit") }
-                TextButton(onClick = { onRemove(reservation) }) { Text("Remove") }
+                IconButton(onClick = { onEdit(reservation) }) {
+                    Icon(Icons.Outlined.Edit, contentDescription = "Edit reservation")
+                }
+                IconButton(onClick = { onRemove(reservation) }) {
+                    Icon(Icons.Outlined.Delete, contentDescription = "Remove reservation", tint = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }
@@ -105,8 +123,8 @@ internal fun PoolDialog(pool: Pool, onDismiss: () -> Unit, onSave: (Int, Int, St
         onDismissRequest = onDismiss,
         title = { Text("Addresses on ${pool.iface}") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Network ${pool.subnet}", style = MaterialTheme.typography.bodySmall)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                MonoText("Network ${pool.subnet}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 NumberField("First address (last number)", start) { start = it }
                 NumberField("Number of addresses", limit) { limit = it }
                 OutlinedTextField(lease, { lease = it.trim() }, label = { Text("Lease time") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -125,9 +143,10 @@ internal fun ReservationDialog(reservation: Reservation, onDismiss: () -> Unit, 
     var name by remember { mutableStateOf(reservation.name.orEmpty()) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Reservation for ${reservation.mac}") },
+        title = { Text("Edit reservation") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                MonoText(reservation.mac, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
                     ip, { ip = it.trim() }, label = { Text("Address") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(),
