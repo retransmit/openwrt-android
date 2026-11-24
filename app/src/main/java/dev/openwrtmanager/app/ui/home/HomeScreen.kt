@@ -2,7 +2,6 @@ package dev.openwrtmanager.app.ui.home
 
 import android.content.res.Configuration
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,9 +26,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -38,6 +37,7 @@ import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -129,49 +129,27 @@ fun HomeContent(
                     if (ui.status == HomeStatus.NoDevice) {
                         Text("OpenWrt Manager")
                     } else {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable(onClick = onSwitchDevice),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                StatusDotFor(ui.status)
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            ui.deviceName.ifEmpty { "Device" },
-                                            style = MaterialTheme.typography.titleMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.widthIn(max = 180.dp),
-                                        )
-                                        Spacer(Modifier.width(2.dp))
-                                        Icon(
-                                            Icons.Default.KeyboardArrowDown,
-                                            contentDescription = "Switch device",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    StatusLine(ui.status, ui.responseMs)
-                                }
-                            }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                ui.deviceName.ifEmpty { "Device" },
+                                style = MaterialTheme.typography.titleLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            StatusLine(ui.status, ui.responseMs)
                         }
                     }
                 },
                 actions = {
                     if (ui.status != HomeStatus.NoDevice) {
-                        FilledTonalIconButton(
+                        FilledTonalButton(
                             onClick = onSwitchDevice,
-                            modifier = Modifier.padding(end = 8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            modifier = Modifier.padding(end = 12.dp).height(36.dp),
                         ) {
-                            Icon(Icons.Default.SwapHoriz, contentDescription = "Switch device")
+                            Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Switch", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 },
@@ -200,7 +178,7 @@ fun HomeContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 (ui.status as? HomeStatus.Offline)?.let { OfflineCard(it.error, onRefresh) }
@@ -225,29 +203,19 @@ fun HomeContent(
 }
 
 @Composable
-private fun StatusDotFor(status: HomeStatus) {
-    val extra = LocalExtraColors.current
-    val color = when (status) {
-        HomeStatus.Online -> extra.online
-        HomeStatus.Connecting -> MaterialTheme.colorScheme.outline
-        is HomeStatus.Offline -> MaterialTheme.colorScheme.error
-        HomeStatus.NoDevice -> Color.Transparent
-    }
-    StatusDot(color, glow = status == HomeStatus.Online)
-}
-
-@Composable
 private fun StatusLine(status: HomeStatus, responseMs: Long?) {
-    val label = when (status) {
-        HomeStatus.Online -> "Online"
-        HomeStatus.Connecting -> "Connecting..."
-        is HomeStatus.Offline -> "Offline"
-        HomeStatus.NoDevice -> ""
+    val extra = LocalExtraColors.current
+    val (label, color) = when (status) {
+        HomeStatus.Online -> "Online" to extra.online
+        HomeStatus.Connecting -> "Connecting..." to MaterialTheme.colorScheme.outline
+        is HomeStatus.Offline -> "Offline" to MaterialTheme.colorScheme.error
+        HomeStatus.NoDevice -> "" to Color.Transparent
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        StatusDot(color, glow = status == HomeStatus.Online)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (status == HomeStatus.Online && responseMs != null) {
-            MonoText("· $responseMs ms", color = MaterialTheme.colorScheme.onSurfaceVariant, size = 10.sp)
+            MonoText("· $responseMs ms", color = MaterialTheme.colorScheme.onSurfaceVariant, size = 11.sp)
         }
     }
 }
@@ -257,7 +225,19 @@ private fun rateParts(bps: Long): Pair<String, String> = formatRate(bps).let { i
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SpeedCard(rate: Rate?, history: List<Rate>) {
-    SectionCard(label = "Internet", trailing = { LiveMarker() }, glow = true) {
+    val peak = history.maxOfOrNull { maxOf(it.downBps, it.upBps) } ?: 0L
+    SectionCard(
+        label = "Internet",
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (history.size >= 2 && peak > 0L) {
+                    MonoText("peak ${formatRate(peak)}", color = MaterialTheme.colorScheme.onSurfaceVariant, size = 10.sp)
+                }
+                LiveMarker()
+            }
+        },
+        glow = true,
+    ) {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -265,7 +245,7 @@ private fun SpeedCard(rate: Rate?, history: List<Rate>) {
             SpeedFigure(Icons.Default.ArrowDownward, "Download", rate?.downBps, MaterialTheme.colorScheme.primary)
             SpeedFigure(Icons.Default.ArrowUpward, "Upload", rate?.upBps, MaterialTheme.colorScheme.tertiary)
         }
-        RateGraph(history, slots = GRAPH_SLOTS, modifier = Modifier.fillMaxWidth().height(112.dp))
+        RateGraph(history, slots = GRAPH_SLOTS, modifier = Modifier.fillMaxWidth().height(104.dp))
     }
 }
 
@@ -287,7 +267,7 @@ private fun SpeedFigure(icon: ImageVector, label: String, bps: Long?, tint: Colo
                 Text("measuring...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 val (value, unit) = rateParts(bps)
-                Readout(value, unit = unit, color = tint, size = 24.sp)
+                Readout(value, unit = unit, color = tint, size = 22.sp)
             }
         }
     }
@@ -316,22 +296,30 @@ private fun StatsGrid(ui: HomeUi) {
     val gap = Arrangement.spacedBy(10.dp)
     Column(verticalArrangement = gap) {
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = gap) {
-            StatTile("Uptime", system?.let { formatUptime(it.uptimeSeconds) } ?: "?", Modifier.weight(2f).fillMaxHeight())
-            StatTile("Clients", ui.clientTotal?.toString() ?: "?", Modifier.weight(1f).fillMaxHeight())
+            StatTile("Uptime", system?.let { formatUptime(it.uptimeSeconds) } ?: "?", Modifier.weight(1.3f).fillMaxHeight())
+            StatTile("Clients", ui.clientTotal?.toString() ?: "?", Modifier.weight(0.85f).fillMaxHeight())
+            StatTile("Load", system?.let { String.format(Locale.US, "%.2f", it.load1) } ?: "?", Modifier.weight(0.85f).fillMaxHeight())
         }
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = gap) {
-            StatTile("Load", system?.let { String.format(Locale.US, "%.2f", it.load1) } ?: "?", Modifier.weight(1f).fillMaxHeight())
             val ram = system?.let { memoryUsedPercent(it.memTotalBytes, it.memAvailableBytes) }
-            StatTile("RAM", ram?.toString() ?: "?", Modifier.weight(1f).fillMaxHeight(), unit = ram?.let { "%" }, usage = ram)
+            val ramFree = system?.let { "${formatBytes(it.memAvailableBytes)} free" }
+            StatTile(
+                "RAM",
+                ram?.toString() ?: "?",
+                Modifier.weight(1f).fillMaxHeight(),
+                unit = ram?.let { "%" },
+                usage = ram,
+                detail = ramFree,
+            )
             val flash = system?.let { flashUsedPercent(it.flashTotalBytes, it.flashUsedBytes) }
-            val free = system?.let { s -> s.flashTotalBytes?.let { total -> s.flashUsedBytes?.let { used -> "${formatBytes(total - used)} free" } } }
+            val flashFree = system?.let { s -> s.flashTotalBytes?.let { total -> s.flashUsedBytes?.let { used -> "${formatBytes(total - used)} free" } } }
             StatTile(
                 "Flash",
                 flash?.toString() ?: "–",
                 Modifier.weight(1f).fillMaxHeight(),
                 unit = flash?.let { "%" },
                 usage = flash,
-                detail = free,
+                detail = flashFree,
             )
         }
     }
@@ -390,7 +378,11 @@ private fun WifiCard(wifi: List<WifiRow>, onShowQr: (String) -> Unit) {
                 }
                 Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 42.dp)) {
                     Readout("${row.clients}", size = 16.sp)
-                    Label(if (row.clients == 1) "client" else "clients")
+                    Text(
+                        if (row.clients == 1) "client" else "clients",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -406,10 +398,27 @@ private fun Band.label(): String = when (this) {
 
 @Composable
 private fun SystemFooter(system: SystemInfo) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        val color = MaterialTheme.colorScheme.onSurfaceVariant
-        if (system.model.isNotBlank()) MonoText(system.model, color = color, size = 11.sp)
-        if (system.firmware.isNotBlank()) MonoText(system.firmware, color = color, size = 11.sp)
+    if (system.model.isBlank() && system.firmware.isBlank()) return
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            IconBadge(Icons.Default.Memory)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (system.model.isNotBlank()) {
+                    Text(system.model, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (system.firmware.isNotBlank()) {
+                    MonoText(system.firmware, color = MaterialTheme.colorScheme.onSurfaceVariant, size = 11.sp)
+                }
+            }
+        }
     }
 }
 

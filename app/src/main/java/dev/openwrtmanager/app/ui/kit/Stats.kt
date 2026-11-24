@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -35,16 +35,16 @@ fun StatTile(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Column(Modifier.padding(14.dp)) {
+        Column(Modifier.padding(12.dp)) {
             Label(label)
-            Readout(value, Modifier.padding(top = 6.dp), unit = unit, size = 18.sp)
-            if (usage != null) UsageBar(usage, Modifier.padding(top = 10.dp))
-            if (detail != null) MonoText(detail, Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, size = 10.sp, maxLines = 2)
+            Readout(value, Modifier.padding(top = 4.dp), unit = unit, size = 18.sp)
+            if (usage != null) UsageBar(usage, Modifier.padding(top = 8.dp))
+            if (detail != null) MonoText(detail, Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, size = 10.sp, maxLines = 1)
         }
     }
 }
 
-/** A rounded M3 progress track showing how full something is. */
+/** A crisp M3 linear bar showing how full something is. */
 @Composable
 fun UsageBar(percent: Int?, modifier: Modifier = Modifier) {
     val animated by animateFloatAsState(targetValue = usageFraction(percent), label = "usage")
@@ -52,18 +52,19 @@ fun UsageBar(percent: Int?, modifier: Modifier = Modifier) {
         (percent ?: 0) >= 90 -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.primary
     }
+    val trackShape = RoundedCornerShape(3.dp)
     Box(
         modifier
             .fillMaxWidth()
-            .height(6.dp)
-            .clip(CircleShape)
+            .height(5.dp)
+            .clip(trackShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHighest),
     ) {
         Box(
             Modifier
                 .fillMaxWidth(animated)
-                .height(6.dp)
-                .clip(CircleShape)
+                .height(5.dp)
+                .clip(RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp, topEnd = 2.dp, bottomEnd = 2.dp))
                 .background(barColor),
         )
     }

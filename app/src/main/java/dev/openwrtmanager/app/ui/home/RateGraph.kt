@@ -1,13 +1,8 @@
 package dev.openwrtmanager.app.ui.home
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -21,10 +16,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import dev.openwrtmanager.app.domain.Rate
 import dev.openwrtmanager.app.ui.common.formatRate
-import dev.openwrtmanager.app.ui.kit.MonoText
 
 /** Smooth rolling graph of download (filled) and upload, scaled to the largest sample shown. */
 @Composable
@@ -35,39 +28,36 @@ fun RateGraph(history: List<Rate>, slots: Int, modifier: Modifier = Modifier) {
     val peak = history.maxOfOrNull { maxOf(it.downBps, it.upBps) } ?: 0L
     val description = if (history.isEmpty()) "Speed graph, waiting for data" else "Speed graph, peak ${formatRate(peak)}"
 
-    Box(modifier.semantics { contentDescription = description }) {
-        Canvas(Modifier.fillMaxSize()) {
-            val dash = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 6.dp.toPx()))
-            drawLine(gridColor, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
-            drawLine(gridColor, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 1.dp.toPx(), pathEffect = dash)
-            if (history.size < 2) return@Canvas
-            val scale = peak.coerceAtLeast(1_000) * 1.15f
-            drawSeries(history.map { it.downBps }, slots, scale, downColor, fill = true)
-            drawSeries(history.map { it.upBps }, slots, scale, upColor, fill = false)
-        }
-        if (history.size >= 2 && peak > 0L) {
-            MonoText(
-                "peak ${formatRate(peak)}",
-                size = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .background(
-                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.72f),
-                        MaterialTheme.shapes.extraSmall,
-                    )
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-        }
+    Canvas(modifier.semantics { contentDescription = description }) {
+        val topPad = 4.dp.toPx()
+        val bottomY = size.height - 2.dp.toPx()
+        val usableHeight = (bottomY - topPad).coerceAtLeast(1f)
+        val dash = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 5.dp.toPx()))
+        drawLine(gridColor, Offset(0f, bottomY), Offset(size.width, bottomY), strokeWidth = 1.dp.toPx())
+        drawLine(gridColor, Offset(0f, topPad + usableHeight / 2f), Offset(size.width, topPad + usableHeight / 2f), strokeWidth = 1.dp.toPx(), pathEffect = dash)
+        drawLine(gridColor.copy(alpha = 0.35f), Offset(0f, topPad), Offset(size.width, topPad), strokeWidth = 1.dp.toPx(), pathEffect = dash)
+        if (history.size < 2) return@Canvas
+        val scale = peak.coerceAtLeast(1_000) * 1.12f
+        drawSeries(history.map { it.downBps }, slots, scale, topPad, bottomY, usableHeight, downColor, fill = true)
+        drawSeries(history.map { it.upBps }, slots, scale, topPad, bottomY, usableHeight, upColor, fill = false)
     }
 }
 
-private fun DrawScope.drawSeries(values: List<Long>, slots: Int, scale: Float, color: Color, fill: Boolean) {
+private fun DrawScope.drawSeries(
+    values: List<Long>,
+    slots: Int,
+    scale: Float,
+    topPad: Float,
+    bottomY: Float,
+    usableHeight: Float,
+    color: Color,
+    fill: Boolean,
+) {
     val step = size.width / (slots - 1).coerceAtLeast(1)
     val startX = size.width - step * (values.size - 1)
     val points = values.mapIndexed { index, value ->
         val x = startX + step * index
-        val y = size.height - (value / scale).coerceIn(0f, 1f) * size.height
+        val y = bottomY - (value / scale).coerceIn(0f, 1f) * usableHeight
         Offset(x, y)
     }
     val line = Path().apply {
@@ -82,11 +72,11 @@ private fun DrawScope.drawSeries(values: List<Long>, slots: Int, scale: Float, c
     if (fill) {
         val area = Path().apply {
             addPath(line)
-            lineTo(points.last().x, size.height)
-            lineTo(points.first().x, size.height)
+            lineTo(points.last().x, bottomY)
+            lineTo(points.first().x, bottomY)
             close()
         }
-        drawPath(area, Brush.verticalGradient(listOf(color.copy(alpha = 0.30f), color.copy(alpha = 0.02f))))
+        drawPath(area, Brush.verticalGradient(listOf(color.copy(alpha = 0.28f), color.copy(alpha = 0.02f)), startY = topPad, endY = bottomY))
     }
-    drawPath(line, color, style = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawPath(line, color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
