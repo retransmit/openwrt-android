@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lan
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,7 +33,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -40,8 +40,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -49,12 +51,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -63,10 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openwrtmanager.app.apply.ChangeSet
 import dev.openwrtmanager.app.ui.apply.ApplySheet
 import dev.openwrtmanager.app.ui.apply.ApplyViewModel
-import dev.openwrtmanager.app.ui.kit.BannerCard
-import dev.openwrtmanager.app.ui.kit.BannerTone
 import dev.openwrtmanager.app.ui.kit.ChipTone
-import dev.openwrtmanager.app.ui.kit.Label
 import dev.openwrtmanager.app.ui.kit.MonoText
 import dev.openwrtmanager.app.ui.kit.Readout
 import dev.openwrtmanager.app.ui.kit.SectionCard
@@ -74,6 +75,12 @@ import dev.openwrtmanager.app.ui.kit.StateNotice
 import dev.openwrtmanager.app.ui.kit.SwitchListRow
 import dev.openwrtmanager.app.ui.kit.TagChip
 import dev.openwrtmanager.app.vlan.PortRole
+
+private enum class NetworkSection(val label: String) {
+    INTERFACES("Interfaces"),
+    VLANS("VLANs"),
+    DHCP("DHCP"),
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,11 +96,12 @@ fun VlanScreen(
     }
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val extrasUi by extras.ui.collectAsStateWithLifecycle()
+    var section by rememberSaveable { mutableStateOf(NetworkSection.INTERFACES) }
     var editing by remember { mutableStateOf<VlanRow?>(null) }
     var creating by remember { mutableStateOf(false) }
     var removing by remember { mutableStateOf<VlanRow?>(null) }
     val dialogs = remember { ExtrasDialogs() }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val review: (ChangeSet?) -> Boolean = { change ->
         if (change != null) {
             applyViewModel.review(change) {
@@ -104,11 +112,13 @@ fun VlanScreen(
         change != null
     }
 
+    val offline = ui is VlanUi.Offline || extrasUi is ExtrasUi.Offline
+
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { MediumTopAppBar(title = { Text("Network") }, scrollBehavior = scrollBehavior) },
+        topBar = { TopAppBar(title = { Text("Network") }, scrollBehavior = scrollBehavior) },
         floatingActionButton = {
-            if (ui is VlanUi.Ready) {
+            if (section == NetworkSection.VLANS && ui is VlanUi.Ready) {
                 ExtendedFloatingActionButton(
                     onClick = { creating = true },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -129,52 +139,92 @@ fun VlanScreen(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                (extrasUi as? ExtrasUi.Ready)?.let { state -> InterfacesSection(state, onEditPool = { dialogs.pool = it }) }
-                if (ui is VlanUi.Ready) Label("VLANs", Modifier.padding(horizontal = 4.dp))
-                when (val state = ui) {
-                    VlanUi.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
-                    VlanUi.Offline -> StateNotice(
+                if (offline) {
+                    StateNotice(
                         icon = Icons.Default.LinkOff,
                         title = "Not connected",
-                        detail = "Connect to a device on the Home tab to manage its network and VLANs.",
+                        detail = "Connect to a device on the Home tab to manage its interfaces, VLANs, and DHCP.",
                     )
-                    VlanUi.Failed -> StateNotice(
-                        icon = Icons.Default.LinkOff,
-                        title = "Could not read network settings",
-                        detail = "The device did not answer as expected.",
-                        actionLabel = "Try again",
-                        onAction = viewModel::load,
-                    )
-                    VlanUi.Unsupported -> StateNotice(
-                        icon = Icons.Default.Lan,
-                        title = "VLANs unavailable here",
-                        detail = "This device's home network is not on a DSA bridge with switch ports.",
-                    )
-                    is VlanUi.Ready -> {
-                        BannerCard(
-                            text = if (state.filtering) {
-                                "Each port is a device port (untagged) in at most one VLAN, and can carry others tagged to an access point."
-                            } else {
-                                "VLANs are off: every port is on your home network. Filtering turns on with the first VLAN you create."
-                            },
-                            tone = BannerTone.INFO,
-                        )
-                        state.rows.forEach { row ->
-                            VlanCard(row, state.ports, onEdit = { editing = row }, onRemove = { removing = row })
+                } else {
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        val readyExtras = extrasUi as? ExtrasUi.Ready
+                        val readyVlans = ui as? VlanUi.Ready
+                        NetworkSection.entries.forEachIndexed { index, item ->
+                            val count = when (item) {
+                                NetworkSection.INTERFACES -> readyExtras?.interfaces?.size
+                                NetworkSection.VLANS -> readyVlans?.rows?.size
+                                NetworkSection.DHCP -> readyExtras?.reservations?.size
+                            }
+                            SegmentedButton(
+                                selected = section == item,
+                                onClick = { section = item },
+                                shape = SegmentedButtonDefaults.itemShape(index, NetworkSection.entries.size),
+                            ) {
+                                Text(if (count != null) "${item.label} ($count)" else item.label, maxLines = 1)
+                            }
+                        }
+                    }
+
+                    when (section) {
+                        NetworkSection.INTERFACES -> when (val e = extrasUi) {
+                            ExtrasUi.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
+                            ExtrasUi.Offline -> Unit
+                            ExtrasUi.Failed -> StateNotice(
+                                icon = Icons.Default.LinkOff,
+                                title = "Could not read interfaces",
+                                detail = "The device did not answer as expected.",
+                                actionLabel = "Try again",
+                                onAction = extras::load,
+                            )
+                            is ExtrasUi.Ready -> InterfacesSection(e, onEditPool = { dialogs.pool = it })
+                        }
+
+                        NetworkSection.VLANS -> when (val state = ui) {
+                            VlanUi.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
+                            VlanUi.Offline -> Unit
+                            VlanUi.Failed -> StateNotice(
+                                icon = Icons.Default.LinkOff,
+                                title = "Could not read VLAN settings",
+                                detail = "The device did not answer as expected.",
+                                actionLabel = "Try again",
+                                onAction = viewModel::load,
+                            )
+                            VlanUi.Unsupported -> StateNotice(
+                                icon = Icons.Default.Lan,
+                                title = "VLANs unavailable here",
+                                detail = "This device's home network is not on a DSA bridge with switch ports.",
+                            )
+                            is VlanUi.Ready -> {
+                                SwitchPortsStrip(state.ports, state.rows, state.filtering)
+                                state.rows.forEach { row ->
+                                    VlanCard(row, state.ports, onEdit = { editing = row }, onRemove = { removing = row })
+                                }
+                                Spacer(Modifier.height(76.dp))
+                            }
+                        }
+
+                        NetworkSection.DHCP -> when (val e = extrasUi) {
+                            ExtrasUi.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
+                            ExtrasUi.Offline -> Unit
+                            ExtrasUi.Failed -> StateNotice(
+                                icon = Icons.Default.LinkOff,
+                                title = "Could not read DHCP settings",
+                                detail = "The device did not answer as expected.",
+                                actionLabel = "Try again",
+                                onAction = extras::load,
+                            )
+                            is ExtrasUi.Ready -> DhcpSection(
+                                e,
+                                onEditPool = { dialogs.pool = it },
+                                onEditReservation = { dialogs.reservation = it },
+                                onRemoveReservation = { review(extras.removeReservation(it)) },
+                            )
                         }
                     }
                 }
-                (extrasUi as? ExtrasUi.Ready)?.let { state ->
-                    ReservationsSection(
-                        state,
-                        onEdit = { dialogs.reservation = it },
-                        onRemove = { review(extras.removeReservation(it)) },
-                    )
-                }
-                if (ui is VlanUi.Ready) Spacer(Modifier.height(76.dp))
             }
         }
     }
@@ -228,8 +278,61 @@ fun VlanScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
+private fun SwitchPortsStrip(ports: List<String>, rows: List<VlanRow>, filtering: Boolean) {
+    if (ports.isEmpty()) return
+    SectionCard(label = "Switch ports") {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            ports.forEach { port ->
+                val untagged = rows.firstOrNull { it.roles[port] == PortRole.UNTAGGED }
+                val taggedCount = rows.count { it.roles[port] == PortRole.TAGGED }
+                val label = when {
+                    untagged == null -> "Unassigned"
+                    untagged.home -> "Home"
+                    else -> untagged.name ?: "VLAN ${untagged.vid}"
+                }
+                val active = untagged != null
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = if (active) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLowest,
+                ) {
+                    Column(
+                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        MonoText(port, size = 11.sp, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (taggedCount > 0) {
+                            MonoText("+$taggedCount tagged", size = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+        Text(
+            if (filtering) {
+                "Tap any VLAN below to change device ports or tagged AP links."
+            } else {
+                "VLAN filtering is off: all ports share your home network until you create a VLAN."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
 private fun VlanCard(row: VlanRow, ports: List<String>, onEdit: () -> Unit, onRemove: () -> Unit) {
-    SectionCard(Modifier.clickable(onClick = onEdit)) {
+    SectionCard(Modifier.clip(MaterialTheme.shapes.large).clickable(onClick = onEdit)) {
         val title = if (row.home) "Home network" else row.name ?: "VLAN ${row.vid}"
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
@@ -248,6 +351,9 @@ private fun VlanCard(row: VlanRow, ports: List<String>, onEdit: () -> Unit, onRe
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Outlined.Tune, contentDescription = "Edit ports for $title")
+            }
             if (row.removable) {
                 IconButton(onClick = onRemove) {
                     Icon(Icons.Outlined.Delete, contentDescription = "Remove VLAN ${row.vid}", tint = MaterialTheme.colorScheme.error)
@@ -265,7 +371,7 @@ private fun VlanCard(row: VlanRow, ports: List<String>, onEdit: () -> Unit, onRe
                 }
             }
             if (row.roles.values.none { it != PortRole.NONE }) {
-                Text("No ports, Wi-Fi only", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Wi-Fi only (no switch ports)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

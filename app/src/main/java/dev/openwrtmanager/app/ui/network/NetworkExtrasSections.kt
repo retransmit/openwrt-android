@@ -1,21 +1,28 @@
 package dev.openwrtmanager.app.ui.network
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Hub
+import androidx.compose.material.icons.outlined.Lan
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,6 +32,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,45 +42,93 @@ import dev.openwrtmanager.app.clients.Pool
 import dev.openwrtmanager.app.clients.Reservation
 import dev.openwrtmanager.app.ui.clients.duration
 import dev.openwrtmanager.app.ui.kit.ChipTone
-import dev.openwrtmanager.app.ui.kit.Label
+import dev.openwrtmanager.app.ui.kit.IconBadge
 import dev.openwrtmanager.app.ui.kit.ListCard
 import dev.openwrtmanager.app.ui.kit.MonoText
 import dev.openwrtmanager.app.ui.kit.RowDivider
 import dev.openwrtmanager.app.ui.kit.SectionCard
 import dev.openwrtmanager.app.ui.kit.TagChip
 
-/** Interfaces, then (after the VLANs) reservations, with their edit dialogs. */
+private fun interfaceIcon(name: String): ImageVector = when {
+    name.startsWith("wan") -> Icons.Outlined.Public
+    name.contains("tailscale") || name.startsWith("wg") || name.contains("vpn") -> Icons.Outlined.VpnKey
+    name == "lan" -> Icons.Outlined.Lan
+    else -> Icons.Outlined.Hub
+}
+
+private fun poolRangeText(pool: Pool): String {
+    val end = pool.start + pool.limit - 1
+    return if (pool.limit > 0 && end <= 254) {
+        "DHCP .${pool.start}-.$end (${pool.limit}) · ${pool.leasetime}"
+    } else {
+        "DHCP ${pool.limit} from .${pool.start} · ${pool.leasetime}"
+    }
+}
+
+/** Interfaces list with status badges, traffic counters, and compact DHCP pool pills. */
 @Composable
 internal fun InterfacesSection(state: ExtrasUi.Ready, onEditPool: (Pool) -> Unit) {
-    ListCard(label = "Interfaces") {
+    ListCard(label = "Interfaces · ${state.interfaces.size}") {
         state.interfaces.forEachIndexed { index, row ->
             if (index > 0) RowDivider()
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                val s = row.status
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            val s = row.status
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    IconBadge(interfaceIcon(s.name))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(s.name, style = MaterialTheme.typography.titleMedium)
+                            if (s.proto.isNotEmpty()) TagChip(s.proto)
+                        }
+                        val meta = listOfNotNull(s.ipv4, s.uptimeSeconds?.let { "up ${duration(it)}" })
+                        if (meta.isNotEmpty()) {
+                            MonoText(meta.joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                        }
+                    }
                     TagChip(if (s.up) "Up" else "Down", tone = if (s.up) ChipTone.OK else ChipTone.ERROR)
                 }
-                MonoText(
-                    listOfNotNull(s.proto.ifEmpty { null }, s.ipv4, s.uptimeSeconds?.let { "up ${duration(it)}" }).joinToString(" · "),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                )
                 if (s.rxBytes != null && s.txBytes != null) {
-                    MonoText("↓ ${bytes(s.rxBytes)}   ↑ ${bytes(s.txBytes)}", color = MaterialTheme.colorScheme.onSurfaceVariant, size = 11.sp)
+                    MonoText(
+                        "↓ ${bytes(s.rxBytes)}   ↑ ${bytes(s.txBytes)}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        size = 11.sp,
+                        modifier = Modifier.padding(start = 48.dp),
+                    )
                 }
                 row.pool?.let { pool ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        MonoText(
-                            "DHCP ${pool.limit} from .${pool.start} · lease ${pool.leasetime}",
-                            Modifier.weight(1f),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            size = 11.sp,
-                            maxLines = 2,
-                        )
-                        FilledTonalButton(onClick = { onEditPool(pool) }) {
-                            Icon(Icons.Outlined.Tune, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
-                            Text("Pool")
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier
+                            .padding(start = 48.dp)
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable { onEditPool(pool) },
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Tune,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            MonoText(
+                                poolRangeText(pool),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                size = 11.sp,
+                                maxLines = 2,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                Icons.Outlined.ChevronRight,
+                                contentDescription = "Edit pool",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
                         }
                     }
                 }
@@ -80,34 +137,79 @@ internal fun InterfacesSection(state: ExtrasUi.Ready, onEditPool: (Pool) -> Unit
     }
 }
 
+/** DHCP pools summary + static reservations with full non-truncated MAC addresses. */
 @Composable
-internal fun ReservationsSection(state: ExtrasUi.Ready, onEdit: (Reservation) -> Unit, onRemove: (Reservation) -> Unit) {
-    if (state.reservations.isEmpty()) {
-        SectionCard(label = "Address reservations") {
-            Text(
-                "None yet. Reserve an address from a device on the Clients tab.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+internal fun DhcpSection(
+    state: ExtrasUi.Ready,
+    onEditPool: (Pool) -> Unit,
+    onEditReservation: (Reservation) -> Unit,
+    onRemoveReservation: (Reservation) -> Unit,
+) {
+    val pools = state.interfaces.mapNotNull { it.pool }
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (state.reservations.isEmpty()) {
+            SectionCard(label = "Address reservations · 0") {
+                Text(
+                    "No static leases yet. Open any device on the Clients tab to reserve its IP address.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            ListCard(label = "Address reservations · ${state.reservations.size}") {
+                state.reservations.forEachIndexed { index, reservation ->
+                    if (index > 0) RowDivider()
+                    Row(
+                        Modifier.padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(reservation.name ?: "Unnamed", style = MaterialTheme.typography.titleSmall)
+                                reservation.ip?.let { TagChip(it, tone = ChipTone.ACCENT) }
+                            }
+                            MonoText(
+                                reservation.mac,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                size = 12.sp,
+                                maxLines = 2,
+                            )
+                        }
+                        IconButton(onClick = { onEditReservation(reservation) }) {
+                            Icon(Icons.Outlined.Edit, contentDescription = "Edit reservation")
+                        }
+                        IconButton(onClick = { onRemoveReservation(reservation) }) {
+                            Icon(Icons.Outlined.Delete, contentDescription = "Remove reservation", tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
         }
-        return
-    }
-    ListCard(label = "Address reservations · ${state.reservations.size}") {
-        state.reservations.forEachIndexed { index, reservation ->
-            if (index > 0) RowDivider()
-            Row(
-                Modifier.padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(reservation.name ?: "Unnamed", style = MaterialTheme.typography.bodyLarge)
-                    MonoText("${reservation.ip ?: "no address"} · ${reservation.mac}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                IconButton(onClick = { onEdit(reservation) }) {
-                    Icon(Icons.Outlined.Edit, contentDescription = "Edit reservation")
-                }
-                IconButton(onClick = { onRemove(reservation) }) {
-                    Icon(Icons.Outlined.Delete, contentDescription = "Remove reservation", tint = MaterialTheme.colorScheme.error)
+
+        if (pools.isNotEmpty()) {
+            ListCard(label = "DHCP address pools · ${pools.size}") {
+                pools.forEachIndexed { index, pool ->
+                    if (index > 0) RowDivider()
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onEditPool(pool) }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        IconBadge(Icons.Outlined.Tune)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(pool.iface, style = MaterialTheme.typography.titleSmall)
+                            MonoText(poolRangeText(pool), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                        }
+                        Icon(
+                            Icons.Outlined.ChevronRight,
+                            contentDescription = "Edit pool",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
