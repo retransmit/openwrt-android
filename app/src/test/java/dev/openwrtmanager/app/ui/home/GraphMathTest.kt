@@ -41,6 +41,16 @@ class GraphMathTest {
     }
 
     @Test
+    fun download_rises_above_the_centre_and_upload_falls_below() {
+        // Centre at y = 100, each half 80 px tall, scale top 200k.
+        assertEquals(100f, mirroredY(0, 200_000f, centreY = 100f, half = 80f, above = true), 0.01f)
+        assertEquals(60f, mirroredY(100_000, 200_000f, centreY = 100f, half = 80f, above = true), 0.01f)
+        assertEquals(20f, mirroredY(200_000, 200_000f, centreY = 100f, half = 80f, above = true), 0.01f)
+        assertEquals(140f, mirroredY(100_000, 200_000f, centreY = 100f, half = 80f, above = false), 0.01f)
+        assertEquals("never leaves its half", 180f, mirroredY(900_000, 200_000f, centreY = 100f, half = 80f, above = false), 0.01f)
+    }
+
+    @Test
     fun age_reads_as_time_ago() {
         assertEquals("now", ageLabel(samplesBack = 0, sampleMs = 2_000))
         assertEquals("6 s ago", ageLabel(samplesBack = 3, sampleMs = 2_000))

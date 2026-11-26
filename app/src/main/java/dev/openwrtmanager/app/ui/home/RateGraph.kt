@@ -53,9 +53,9 @@ import kotlin.math.roundToInt
 private const val MIN_SAMPLES = 3
 
 /**
- * Rolling graph of download (filled) and upload. The scale is a tidy number with labelled
- * gridlines and eases between steps; the line glides left between samples; pressing and dragging
- * shows the exact rates at that moment.
+ * Rolling graph mirrored around a centre line: download fills above it, upload below, so the two
+ * never overlap. Both halves share one tidy, labelled scale that eases between steps; the lines
+ * glide left between samples; pressing and dragging shows the exact rates at that moment.
  */
 @Composable
 fun RateGraph(history: List<Rate>, slots: Int, sampleMs: Long, modifier: Modifier = Modifier) {
@@ -100,36 +100,34 @@ fun RateGraph(history: List<Rate>, slots: Int, sampleMs: Long, modifier: Modifie
                     ) { change, _ -> touchX = change.position.x }
                 },
         ) {
-            val topPad = 4.dp.toPx()
-            val bottomY = size.height - 2.dp.toPx()
-            val usable = (bottomY - topPad).coerceAtLeast(1f)
+            val topY = 4.dp.toPx()
+            val bottomY = size.height - 4.dp.toPx()
+            val centreY = (topY + bottomY) / 2f
+            val half = ((bottomY - topY) / 2f).coerceAtLeast(1f)
             val dash = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 5.dp.toPx()))
-            drawLine(gridColor, Offset(0f, bottomY), Offset(size.width, bottomY), strokeWidth = 1.dp.toPx())
-            drawLine(gridColor, Offset(0f, topPad + usable / 2f), Offset(size.width, topPad + usable / 2f), strokeWidth = 1.dp.toPx(), pathEffect = dash)
-            drawLine(gridColor.copy(alpha = 0.35f), Offset(0f, topPad), Offset(size.width, topPad), strokeWidth = 1.dp.toPx(), pathEffect = dash)
+            drawLine(gridColor.copy(alpha = 0.35f), Offset(0f, topY), Offset(size.width, topY), strokeWidth = 1.dp.toPx(), pathEffect = dash)
+            drawLine(gridColor.copy(alpha = 0.35f), Offset(0f, bottomY), Offset(size.width, bottomY), strokeWidth = 1.dp.toPx(), pathEffect = dash)
+            drawLine(gridColor, Offset(0f, centreY), Offset(size.width, centreY), strokeWidth = 1.dp.toPx())
             if (!ready) return@Canvas
             val step = size.width / (slots - 1).coerceAtLeast(1)
             // While gliding the newest point sits just past the right edge, so it slides into view.
             val shift = (1f - glide.value) * step
-            drawSeries(history.map { it.downBps }, step, shift, easedTop, topPad, bottomY, usable, downColor, fill = true)
-            drawSeries(history.map { it.upBps }, step, shift, easedTop, topPad, bottomY, usable, upColor, fill = false)
+            drawSeries(history.map { it.downBps }, step, shift, easedTop, centreY, half, above = true, downColor)
+            drawSeries(history.map { it.upBps }, step, shift, easedTop, centreY, half, above = false, upColor)
             touchX?.let { x ->
                 val index = sampleAt(x, size.width, slots, history.size)
                 val sx = size.width - step * (history.size - 1 - index)
-                drawLine(labelColor.copy(alpha = 0.6f), Offset(sx, topPad), Offset(sx, bottomY), strokeWidth = 1.dp.toPx())
+                drawLine(labelColor.copy(alpha = 0.6f), Offset(sx, topY), Offset(sx, bottomY), strokeWidth = 1.dp.toPx())
                 val sample = history[index]
-                for ((value, color) in listOf(sample.downBps to downColor, sample.upBps to upColor)) {
-                    val y = bottomY - (value / easedTop).coerceIn(0f, 1f) * usable
-                    drawCircle(color, radius = 4.dp.toPx(), center = Offset(sx, y))
-                }
+                drawCircle(downColor, radius = 4.dp.toPx(), center = Offset(sx, mirroredY(sample.downBps, easedTop, centreY, half, above = true)))
+                drawCircle(upColor, radius = 4.dp.toPx(), center = Offset(sx, mirroredY(sample.upBps, easedTop, centreY, half, above = false)))
             }
         }
-        // Gridline values sit at the right edge, over the lines.
+        // Each half's full-scale value sits at its outer edge, on the right.
         Column(Modifier.fillMaxSize().padding(end = 2.dp), horizontalAlignment = Alignment.End) {
-            MonoText(axisLabel(top), color = labelColor, size = 9.sp)
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                MonoText(axisLabel(top / 2), color = labelColor, size = 9.sp)
-            }
+            MonoText("\u2193 ${axisLabel(top)}", color = downColor, size = 9.sp)
+            Box(Modifier.weight(1f))
+            MonoText("\u2191 ${axisLabel(top)}", color = upColor, size = 9.sp)
         }
         if (!ready) {
             Text(
@@ -177,15 +175,14 @@ private fun DrawScope.drawSeries(
     step: Float,
     shift: Float,
     scale: Float,
-    topPad: Float,
-    bottomY: Float,
-    usable: Float,
+    centreY: Float,
+    half: Float,
+    above: Boolean,
     color: Color,
-    fill: Boolean,
 ) {
     val startX = size.width - step * (values.size - 1) + shift
     val points = values.mapIndexed { index, value ->
-        Offset(startX + step * index, bottomY - (value / scale).coerceIn(0f, 1f) * usable)
+        Offset(startX + step * index, mirroredY(value, scale, centreY, half, above))
     }
     val line = Path().apply {
         moveTo(points.first().x, points.first().y)
@@ -196,14 +193,14 @@ private fun DrawScope.drawSeries(
             cubicTo(midX, prev.y, midX, curr.y, curr.x, curr.y)
         }
     }
-    if (fill) {
-        val area = Path().apply {
-            addPath(line)
-            lineTo(points.last().x, bottomY)
-            lineTo(points.first().x, bottomY)
-            close()
-        }
-        drawPath(area, Brush.verticalGradient(listOf(color.copy(alpha = 0.28f), color.copy(alpha = 0.02f)), startY = topPad, endY = bottomY))
+    val area = Path().apply {
+        addPath(line)
+        lineTo(points.last().x, centreY)
+        lineTo(points.first().x, centreY)
+        close()
     }
+    // Each fill is strongest at its peak and fades towards the centre line.
+    val edge = if (above) centreY - half else centreY + half
+    drawPath(area, Brush.verticalGradient(listOf(color.copy(alpha = 0.30f), color.copy(alpha = 0.04f)), startY = edge, endY = centreY))
     drawPath(line, color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
 }

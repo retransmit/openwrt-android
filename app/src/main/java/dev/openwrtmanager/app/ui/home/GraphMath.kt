@@ -43,6 +43,15 @@ fun sampleAt(x: Float, width: Float, slots: Int, count: Int): Int {
     return (count - 1 - back).coerceIn(0, count - 1)
 }
 
+/**
+ * Where a rate sits in the mirrored graph: download rises [above] the centre line, upload falls
+ * below it, each within its own half [half] tall, and never past the edge of that half.
+ */
+fun mirroredY(bps: Long, scale: Float, centreY: Float, half: Float, above: Boolean): Float {
+    val offset = (bps / scale).coerceIn(0f, 1f) * half
+    return if (above) centreY - offset else centreY + offset
+}
+
 /** How long ago a sample [samplesBack] places from the newest was taken. */
 fun ageLabel(samplesBack: Int, sampleMs: Long): String {
     val seconds = samplesBack * sampleMs / 1_000

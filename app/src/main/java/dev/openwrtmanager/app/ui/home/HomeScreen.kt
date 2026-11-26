@@ -248,7 +248,7 @@ private fun SpeedCard(rate: Rate?, history: List<Rate>) {
             SpeedFigure(Icons.Default.ArrowDownward, "Download", rate?.downBps, MaterialTheme.colorScheme.primary)
             SpeedFigure(Icons.Default.ArrowUpward, "Upload", rate?.upBps, MaterialTheme.colorScheme.tertiary)
         }
-        RateGraph(history, slots = GRAPH_SLOTS, sampleMs = GRAPH_SAMPLE_MS, modifier = Modifier.fillMaxWidth().height(104.dp))
+        RateGraph(history, slots = GRAPH_SLOTS, sampleMs = GRAPH_SAMPLE_MS, modifier = Modifier.fillMaxWidth().height(128.dp))
     }
 }
 
