@@ -1,7 +1,6 @@
 package dev.openwrtmanager.app.ui.kit
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,25 +21,25 @@ import dev.openwrtmanager.app.ui.theme.LocalExtraColors
 
 enum class ChipTone { NEUTRAL, ACCENT, OK, WARNING, ERROR }
 
-/** A small outlined tag for bands, states and counts. */
+/** M3 filled-tonal pill chip for bands, states, and counts. */
 @Composable
 fun TagChip(text: String, modifier: Modifier = Modifier, tone: ChipTone = ChipTone.NEUTRAL) {
     val extra = LocalExtraColors.current
     val scheme = MaterialTheme.colorScheme
-    val (border, content) = when (tone) {
-        ChipTone.NEUTRAL -> scheme.outlineVariant to scheme.onSurfaceVariant
-        ChipTone.ACCENT -> scheme.primary to scheme.primary
-        ChipTone.OK -> extra.online to extra.online
-        ChipTone.WARNING -> extra.warning to extra.warning
-        ChipTone.ERROR -> scheme.error to scheme.error
+    val (container, content) = when (tone) {
+        ChipTone.NEUTRAL -> scheme.surfaceContainerHighest to scheme.onSurfaceVariant
+        ChipTone.ACCENT -> scheme.primaryContainer to scheme.onPrimaryContainer
+        ChipTone.OK -> extra.online.copy(alpha = 0.16f) to extra.online
+        ChipTone.WARNING -> extra.warning.copy(alpha = 0.16f) to extra.warning
+        ChipTone.ERROR -> scheme.errorContainer to scheme.onErrorContainer
     }
     MonoText(
         text,
         color = content,
         size = 10.sp,
         modifier = modifier
-            .border(1.dp, border, MaterialTheme.shapes.extraSmall)
-            .padding(horizontal = 6.dp, vertical = 1.dp),
+            .background(container, MaterialTheme.shapes.extraSmall)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
     )
 }
 
@@ -53,8 +52,8 @@ fun StatusDot(color: Color, glow: Boolean, modifier: Modifier = Modifier) {
             .drawBehind {
                 if (glow) {
                     drawCircle(
-                        Brush.radialGradient(listOf(color.copy(alpha = 0.55f), Color.Transparent), center = Offset(size.width / 2, size.height / 2), radius = size.width * 1.3f),
-                        radius = size.width * 1.3f,
+                        Brush.radialGradient(listOf(color.copy(alpha = 0.55f), Color.Transparent), center = Offset(size.width / 2, size.height / 2), radius = size.width * 1.4f),
+                        radius = size.width * 1.4f,
                     )
                 }
             }
@@ -62,13 +61,19 @@ fun StatusDot(color: Color, glow: Boolean, modifier: Modifier = Modifier) {
     )
 }
 
-/** An icon on a tinted rounded square, in the accent colour. */
+/** An icon on a soft M3 tonal container square. */
 @Composable
-fun IconBadge(icon: ImageVector, modifier: Modifier = Modifier, contentDescription: String? = null) {
+fun IconBadge(
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    tint: Color = MaterialTheme.colorScheme.primary,
+    containerColor: Color = LocalExtraColors.current.accentTint,
+) {
     Box(
-        modifier.size(30.dp).background(LocalExtraColors.current.accentTint, MaterialTheme.shapes.small),
+        modifier.size(36.dp).background(containerColor, MaterialTheme.shapes.small),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        Icon(icon, contentDescription, tint = tint, modifier = Modifier.size(20.dp))
     }
 }

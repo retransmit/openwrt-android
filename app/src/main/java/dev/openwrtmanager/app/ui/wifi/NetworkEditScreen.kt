@@ -8,19 +8,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
-import dev.openwrtmanager.app.ui.kit.SectionCard
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -28,7 +29,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -41,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -50,6 +54,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.openwrtmanager.app.apply.ChangeSet
 import dev.openwrtmanager.app.ui.apply.ApplySheet
 import dev.openwrtmanager.app.ui.apply.ApplyViewModel
+import dev.openwrtmanager.app.ui.kit.BannerCard
+import dev.openwrtmanager.app.ui.kit.BannerTone
+import dev.openwrtmanager.app.ui.kit.CheckboxListRow
+import dev.openwrtmanager.app.ui.kit.Label
+import dev.openwrtmanager.app.ui.kit.RowDivider
+import dev.openwrtmanager.app.ui.kit.SectionCard
+import dev.openwrtmanager.app.ui.kit.StateNotice
+import dev.openwrtmanager.app.ui.kit.SwitchListRow
 import dev.openwrtmanager.app.wifi.KeyError
 import dev.openwrtmanager.app.wifi.Security
 import dev.openwrtmanager.app.wifi.SsidError
@@ -98,81 +110,113 @@ fun NetworkEditScreen(
                 .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             when {
-                form.failed -> Notice(Icons.Default.WifiOff, "Could not load this network", "Go back and try again.")
-                !form.loaded -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                form.failed -> StateNotice(
+                    icon = Icons.Default.WifiOff,
+                    title = "Could not load this network",
+                    detail = "Go back and try again.",
+                    fillScreen = true,
+                )
+                !form.loaded -> LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
                 else -> {
                     if (form.readOnly) {
-                        Text(
-                            "This network uses a security mode the app cannot edit. You can look at it and remove it, but not change it here.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
+                        BannerCard(
+                            text = "This network uses a security mode the app cannot edit. You can inspect it and remove it, but not change it here.",
+                            icon = Icons.Default.Warning,
+                            tone = BannerTone.ERROR,
                         )
                     }
-                    OutlinedTextField(
-                        value = form.ssid,
-                        onValueChange = viewModel::onSsid,
-                        label = { Text("Network name") },
-                        isError = form.ssidError != null,
-                        supportingText = form.ssidError?.let { { Text(it.text()) } },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text("Security", style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        listOf(Security.WPA2_WPA3 to "WPA2/3", Security.WPA2 to "WPA2", Security.WPA3 to "WPA3", Security.OPEN to "Open")
-                            .forEach { (security, short) ->
-                                FilterChip(
-                                    selected = form.security == security,
-                                    onClick = { viewModel.onSecurity(security) },
-                                    label = { Text(short) },
-                                )
-                            }
-                    }
-                    if (form.security != Security.OPEN) {
-                        var visible by rememberSaveable { mutableStateOf(false) }
+                    SectionCard(label = "Network & Security") {
                         OutlinedTextField(
-                            value = form.key,
-                            onValueChange = viewModel::onKey,
-                            label = { Text("Password") },
-                            isError = form.keyError != null,
-                            supportingText = { Text(form.keyError?.text() ?: "8 to 63 characters") },
+                            value = form.ssid,
+                            onValueChange = viewModel::onSsid,
+                            label = { Text("Network name") },
+                            isError = form.ssidError != null,
+                            supportingText = form.ssidError?.let { { Text(it.text()) } },
                             singleLine = true,
-                            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
-                            trailingIcon = {
-                                IconButton(onClick = { visible = !visible }) {
-                                    Icon(
-                                        if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (visible) "Hide password" else "Show password",
-                                    )
-                                }
-                            },
                             modifier = Modifier.fillMaxWidth(),
                         )
-                    } else {
-                        Text(
-                            "Anyone nearby can join an open network and see its traffic.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    Text("Bands", style = MaterialTheme.typography.labelLarge)
-                    form.availableRadios.forEach { radio ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = radio.name in form.radios, onCheckedChange = { viewModel.onRadio(radio.name, it) })
-                            Text(radio.band.label(), style = MaterialTheme.typography.bodyLarge)
+                        Label("Security")
+                        val options = listOf(Security.WPA2_WPA3 to "WPA2/3", Security.WPA2 to "WPA2", Security.WPA3 to "WPA3", Security.OPEN to "Open")
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            options.forEachIndexed { index, (security, short) ->
+                                SegmentedButton(
+                                    selected = form.security == security,
+                                    onClick = { viewModel.onSecurity(security) },
+                                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                                ) { Text(short, maxLines = 1) }
+                            }
+                        }
+                        if (form.security != Security.OPEN) {
+                            var visible by rememberSaveable { mutableStateOf(false) }
+                            OutlinedTextField(
+                                value = form.key,
+                                onValueChange = viewModel::onKey,
+                                label = { Text("Password") },
+                                isError = form.keyError != null,
+                                supportingText = { Text(form.keyError?.text() ?: "8 to 63 characters") },
+                                singleLine = true,
+                                visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                                trailingIcon = {
+                                    IconButton(onClick = { visible = !visible }) {
+                                        Icon(
+                                            if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = if (visible) "Hide password" else "Show password",
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            BannerCard(
+                                text = "Anyone nearby can join an open network and read unencrypted traffic.",
+                                icon = Icons.Default.Warning,
+                                tone = BannerTone.ERROR,
+                            )
                         }
                     }
-                    if (form.radioError) {
-                        Text("Pick at least one band", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+
+                    SectionCard(label = "Bands", contentPadding = false) {
+                        form.availableRadios.forEachIndexed { index, radio ->
+                            if (index > 0) RowDivider()
+                            CheckboxListRow(
+                                title = radio.band.label(),
+                                checked = radio.name in form.radios,
+                                onCheckedChange = { viewModel.onRadio(radio.name, it) },
+                            )
+                        }
+                        if (form.radioError) {
+                            Text(
+                                "Pick at least one band",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                            )
+                        }
                     }
-                    SwitchRow("Turned on", null, form.enabled, viewModel::onEnabled)
-                    SwitchRow("Hidden", "Does not appear in network lists. Devices must be told the name.", form.hidden, viewModel::onHidden)
-                    SwitchRow("Keep devices apart", "Devices on this network cannot see each other.", form.isolate, viewModel::onIsolate)
+
+                    SectionCard(label = "Options", contentPadding = false) {
+                        SwitchListRow(title = "Turned on", checked = form.enabled, onCheckedChange = viewModel::onEnabled)
+                        RowDivider()
+                        SwitchListRow(
+                            title = "Hidden",
+                            detail = "Does not appear in network lists. Devices must type the name.",
+                            checked = form.hidden,
+                            onCheckedChange = viewModel::onHidden,
+                        )
+                        RowDivider()
+                        SwitchListRow(
+                            title = "Keep devices apart",
+                            detail = "Devices on this network cannot see each other.",
+                            checked = form.isolate,
+                            onCheckedChange = viewModel::onIsolate,
+                        )
+                    }
+
                     Button(onClick = { review(viewModel.save()) }, enabled = form.canSave, modifier = Modifier.fillMaxWidth()) {
                         Text(if (form.isNew) "Review and add" else "Review changes")
                     }
@@ -185,8 +229,15 @@ fun NetworkEditScreen(
                             onStart = viewModel::startUsteer,
                             onInstall = { confirmInstall = true },
                         )
-                        OutlinedButton(onClick = { confirmRemove = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Remove network", color = MaterialTheme.colorScheme.error)
+                        FilledTonalButton(
+                            onClick = { confirmRemove = true },
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Remove network")
                         }
                     }
                 }
@@ -200,7 +251,9 @@ fun NetworkEditScreen(
             title = { Text("Remove ${form.ssid}?") },
             text = { Text("Devices using this network will be disconnected. You will see exactly what is removed before anything changes.") },
             confirmButton = {
-                TextButton(onClick = { confirmRemove = false; review(viewModel.removeChange()) }) { Text("Continue") }
+                TextButton(onClick = { confirmRemove = false; review(viewModel.removeChange()) }) {
+                    Text("Continue", color = MaterialTheme.colorScheme.error)
+                }
             },
             dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
         )
@@ -218,19 +271,6 @@ fun NetworkEditScreen(
 }
 
 @Composable
-private fun SwitchRow(title: String, detail: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (detail != null) {
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
-
-@Composable
 private fun SteeringCard(
     form: NetworkForm,
     onAssist: (Boolean) -> Unit,
@@ -238,46 +278,52 @@ private fun SteeringCard(
     onStart: () -> Unit,
     onInstall: () -> Unit,
 ) {
-    SectionCard(label = "Band steering") {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SwitchRow(
-                title = "Help devices pick the better band",
-                detail = "Uses one name on every band and tells devices about the alternatives.",
-                checked = form.steeringAssist,
-                onChange = onAssist,
-            )
-            if (form.security != Security.OPEN) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Fast roaming", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            if (form.fastRoaming) "On" else "Shortens the switch between bands. A few old devices dislike it.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (!form.fastRoaming) OutlinedButton(onClick = onFast) { Text("Turn on") }
+    SectionCard(label = "Band steering", contentPadding = false) {
+        SwitchListRow(
+            title = "Help devices pick the better band",
+            detail = "Uses one name on every band and tells devices about alternatives.",
+            checked = form.steeringAssist,
+            onCheckedChange = onAssist,
+        )
+        if (form.security != Security.OPEN) {
+            RowDivider()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Fast roaming (802.11r)", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        if (form.fastRoaming) "Enabled" else "Shortens switching between bands. A few old devices dislike it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
+                if (!form.fastRoaming) OutlinedButton(onClick = onFast) { Text("Turn on") }
             }
-            form.usteer?.let { usteer ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Active steering (usteer)", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            when {
-                                usteer.running -> "Running: the router nudges devices to the better band"
-                                usteer.installed -> "Installed but not running"
-                                else -> "Not installed"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    when {
-                        usteer.running -> Unit
-                        usteer.installed -> OutlinedButton(onClick = onStart, enabled = !form.usteerBusy) { Text("Start") }
-                        else -> OutlinedButton(onClick = onInstall, enabled = !form.usteerBusy) { Text("Install") }
-                    }
+        }
+        form.usteer?.let { usteer ->
+            RowDivider()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Active steering (usteer)", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        when {
+                            usteer.running -> "Running: the router nudges devices to the better band"
+                            usteer.installed -> "Installed but not running"
+                            else -> "Not installed"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                when {
+                    usteer.running -> Unit
+                    usteer.installed -> FilledTonalButton(onClick = onStart, enabled = !form.usteerBusy) { Text("Start") }
+                    else -> FilledTonalButton(onClick = onInstall, enabled = !form.usteerBusy) { Text("Install") }
                 }
             }
         }

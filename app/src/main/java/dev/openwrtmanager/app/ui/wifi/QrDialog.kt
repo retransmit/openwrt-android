@@ -10,15 +10,24 @@ import android.view.WindowManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -63,22 +72,27 @@ fun QrDialog(ssid: String, payload: String, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text(ssid, maxLines = 2) },
         text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Always dark on white, in both themes: that is what scanners expect.
-                Canvas(
-                    Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .background(Color.White, RoundedCornerShape(16.dp))
-                        .padding(8.dp)
-                        .semantics { contentDescription = "QR code to join $ssid" },
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                // Always dark on white with a quiet zone in both themes so cameras scan reliably.
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White,
+                    modifier = Modifier.fillMaxWidth().aspectRatio(1f),
                 ) {
-                    val cell = size.minDimension / matrix.size
-                    for (y in 0 until matrix.size) {
-                        for (x in 0 until matrix.size) {
-                            if (matrix.dark[y * matrix.size + x]) {
-                                // Slight overdraw avoids hairline gaps between neighbouring cells.
-                                drawRect(Color.Black, Offset(x * cell, y * cell), Size(cell + 0.5f, cell + 0.5f))
+                    Box(Modifier.fillMaxSize().padding(14.dp)) {
+                        Canvas(
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.White)
+                                .semantics { contentDescription = "QR code to join $ssid" },
+                        ) {
+                            val cell = size.minDimension / matrix.size
+                            for (y in 0 until matrix.size) {
+                                for (x in 0 until matrix.size) {
+                                    if (matrix.dark[y * matrix.size + x]) {
+                                        drawRect(Color.Black, Offset(x * cell, y * cell), Size(cell + 0.5f, cell + 0.5f))
+                                    }
+                                }
                             }
                         }
                     }
@@ -91,8 +105,14 @@ fun QrDialog(ssid: String, payload: String, onDismiss: () -> Unit) {
                 )
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-        dismissButton = { TextButton(onClick = { shareQr(context, ssid, matrix) }) { Text("Share") } },
+        confirmButton = { Button(onClick = onDismiss) { Text("Done") } },
+        dismissButton = {
+            FilledTonalButton(onClick = { shareQr(context, ssid, matrix) }) {
+                Icon(Icons.Default.Share, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Share")
+            }
+        },
     )
 }
 
@@ -115,7 +135,6 @@ private fun shareQr(context: Context, ssid: String, matrix: QrMatrix) {
         if (matrix.dark[y * matrix.size + x]) AndroidColor.BLACK else AndroidColor.WHITE
     }
     val bitmap = Bitmap.createBitmap(pixels, side, side, Bitmap.Config.ARGB_8888)
-    // The image contains the password in scannable form, so it lives only in the app's private cache.
     val dir = File(context.cacheDir, "qr").apply { mkdirs() }
     val file = File(dir, "wifi-qr.png")
     file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }

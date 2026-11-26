@@ -16,13 +16,17 @@ val MonoFamily = FontFamily(
 
 private val base = Typography()
 
-/** Material's default type, except the smallest label, which is the kit's spaced uppercase label style. */
+/** Material 3 type scale with stronger hierarchy and monospace instrument labels. */
 val AppTypography = base.copy(
+    headlineSmall = base.headlineSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
+    titleLarge = base.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+    titleMedium = base.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+    titleSmall = base.titleSmall.copy(fontWeight = FontWeight.SemiBold),
     labelSmall = TextStyle(
         fontFamily = MonoFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 10.sp,
+        fontSize = 11.sp,
         lineHeight = 14.sp,
-        letterSpacing = 1.5.sp,
+        letterSpacing = 1.1.sp,
     ),
 )
