@@ -32,7 +32,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -89,11 +89,11 @@ fun WifiScreen(
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     var qrFor by remember { mutableStateOf<WifiGroup?>(null) }
     var editingRadio by remember { mutableStateOf<Radio?>(null) }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { MediumTopAppBar(title = { Text("Wi-Fi") }, scrollBehavior = scrollBehavior) },
+        topBar = { TopAppBar(title = { Text("Wi-Fi") }, scrollBehavior = scrollBehavior) },
         floatingActionButton = {
             if (ui is WifiUi.Loaded) {
                 ExtendedFloatingActionButton(

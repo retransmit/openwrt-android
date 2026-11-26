@@ -16,7 +16,7 @@ import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -41,10 +41,10 @@ fun MoreScreen(
     onTerminal: () -> Unit,
     onEditor: () -> Unit,
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { MediumTopAppBar(title = { Text("More") }, scrollBehavior = scrollBehavior) },
+        topBar = { TopAppBar(title = { Text("More") }, scrollBehavior = scrollBehavior) },
     ) { padding ->
         Column(
             Modifier
