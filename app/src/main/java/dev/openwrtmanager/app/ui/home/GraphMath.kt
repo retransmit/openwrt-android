@@ -34,14 +34,20 @@ fun axisLabel(bps: Long): String {
 
 /**
  * Which sample a touch at [x] points at, for a graph [width] wide with [slots] positions and
- * [count] samples, the newest at the right edge. -1 when there are no samples.
+ * [count] samples, the newest at the right edge. -1 when the touch is on the flat lead-in left of
+ * the oldest sample, or there are no samples.
  */
 fun sampleAt(x: Float, width: Float, slots: Int, count: Int): Int {
     if (count <= 0) return -1
     val step = width / (slots - 1).coerceAtLeast(1)
     val back = ((width - x) / step).roundToInt()
+    if (back > count - 1) return -1
     return (count - 1 - back).coerceIn(0, count - 1)
 }
+
+/** The samples as drawn: zeros in front until the window is full, so the line spans the graph. */
+fun <T> leadIn(samples: List<T>, slots: Int, zero: T): List<T> =
+    if (samples.size >= slots) samples.takeLast(slots) else List(slots - samples.size) { zero } + samples
 
 /**
  * Where a rate sits in the mirrored graph: download rises [above] the centre line, upload falls
