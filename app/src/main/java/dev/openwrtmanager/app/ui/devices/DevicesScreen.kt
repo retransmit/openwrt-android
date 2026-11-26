@@ -1,5 +1,8 @@
 package dev.openwrtmanager.app.ui.devices
 
+import dev.openwrtmanager.app.ui.theme.LocalExtraColors
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -136,14 +139,19 @@ private fun DeviceCard(row: DeviceRow, onClick: () -> Unit, onEdit: () -> Unit, 
     var menuOpen by remember { mutableStateOf(false) }
     val profile = row.profile
     val scheme = MaterialTheme.colorScheme
+    // The current device is marked by an accent outline and a faint accent wash, like the rest of
+    // the kit; a filled container comes out as a bright slab on some wallpaper palettes.
+    val tint = LocalExtraColors.current.accentTint
     Surface(
         shape = MaterialTheme.shapes.large,
-        color = if (row.active) scheme.secondaryContainer else scheme.surfaceContainerLow,
+        color = scheme.surfaceContainerLow,
+        border = BorderStroke(if (row.active) 1.5.dp else 1.dp, if (row.active) scheme.primary else scheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (row.active) Modifier.background(tint) else Modifier)
                 .clickable(onClick = onClick)
                 .padding(start = 16.dp, end = 6.dp, top = 14.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -151,19 +159,19 @@ private fun DeviceCard(row: DeviceRow, onClick: () -> Unit, onEdit: () -> Unit, 
         ) {
             IconBadge(
                 Icons.Default.Router,
-                tint = if (row.active) scheme.onPrimaryContainer else scheme.primary,
-                containerColor = if (row.active) scheme.primaryContainer else scheme.surfaceContainerHigh,
+                tint = scheme.primary,
+                containerColor = if (row.active) tint else scheme.surfaceContainerHigh,
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     profile.name,
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (row.active) scheme.onSecondaryContainer else scheme.onSurface,
+                    color = scheme.onSurface,
                 )
                 val address = if (profile.port == 22) profile.host else "${profile.host}:${profile.port}"
                 MonoText(
                     "${profile.username}@$address",
-                    color = if (row.active) scheme.onSecondaryContainer.copy(alpha = 0.8f) else scheme.onSurfaceVariant,
+                    color = scheme.onSurfaceVariant,
                 )
             }
             if (row.active) TagChip("Current", tone = ChipTone.ACCENT)
