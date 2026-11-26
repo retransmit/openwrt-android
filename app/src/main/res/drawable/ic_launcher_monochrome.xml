@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed-icon layer (Android 13+): one colour, tinted by the launcher. The LEDs and the vent
+     are cut out of the router, so the tint shows through them as in the full-colour icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="2.7"
+        android:strokeLineCap="round"
+        android:pathData="M39.375,38.925 A19.65,19.65 0 0 1 68.625,38.925 M43.425,44.55 A12.33,12.33 0 0 1 64.575,44.55 M47.25,49.275 A7.48,7.48 0 0 1 60.75,49.275" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M51.75,55.35 a2.25,2.25 0 1,0 4.5,0 a2.25,2.25 0 1,0 -4.5,0 Z" />
+    <path
+        android:fillColor="#000000"
+        android:fillType="evenOdd"
+        android:pathData="M38.025,62.1 H69.975 A4.05,4.05 0 0 1 74.025,66.15 V69.75 A4.05,4.05 0 0 1 69.975,73.8 H38.025 A4.05,4.05 0 0 1 33.975,69.75 V66.15 A4.05,4.05 0 0 1 38.025,62.1 Z M40.275,67.95 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z M46.125,67.95 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z M58.725,67.05 H67.725 A0.9,0.9 0 0 1 67.725,68.85 H58.725 A0.9,0.9 0 0 1 58.725,67.05 Z" />
+</vector>
