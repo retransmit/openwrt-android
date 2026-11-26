@@ -4,7 +4,7 @@ A native Android app for managing OpenWrt routers and access points, built with 
 
 It talks to the router over SSH only. Nothing has to be installed on the router: the app uses the `ubus` and `uci` tools that every OpenWrt system already has. LuCI and the web server are not required.
 
-> Working title. The name and package id (`dev.openwrtmanager.app`) are placeholders.
+> Working title: the name may still change. The app id is `dev.openwrtapp.app` (from the openwrtapp.dev domain); it is permanent once published.
 
 ## What it does today
 
