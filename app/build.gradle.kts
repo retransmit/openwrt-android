@@ -11,7 +11,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.openwrtmanager.app"
+        applicationId = "dev.openwrtapp.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
