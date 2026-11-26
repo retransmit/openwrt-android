@@ -19,9 +19,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // The release key and its passwords live in the developer's own ~/.gradle/gradle.properties,
+    // never in this repository. Without them only debug builds can be made.
+    val releaseKeystore = providers.gradleProperty("OWA_KEYSTORE").orNull
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = providers.gradleProperty("OWA_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.gradleProperty("OWA_KEY_ALIAS").get()
+                keyPassword = providers.gradleProperty("OWA_KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {
@@ -103,4 +118,16 @@ dependencies {
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+}
+
+// A release must be signed with the release key: stop with a clear message instead of
+// producing an unsigned APK when the key settings are missing. Checked while configuring, so it
+// works with the configuration cache.
+if (!providers.gradleProperty("OWA_KEYSTORE").isPresent &&
+    gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+) {
+    throw GradleException(
+        "Release signing is not set up. Add OWA_KEYSTORE, OWA_KEY_ALIAS, OWA_KEYSTORE_PASSWORD " +
+            "and OWA_KEY_PASSWORD to ~/.gradle/gradle.properties.",
+    )
 }
