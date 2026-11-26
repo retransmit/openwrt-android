@@ -6,6 +6,18 @@ It talks to the router over SSH only. Nothing has to be installed on the router:
 
 > Working title: the name may still change. The app id is `dev.openwrtapp.app` (from the openwrtapp.dev domain); it is permanent once published.
 
+## Install
+
+Download the APK from the [latest release](https://github.com/retransmit/openwrt-android/releases/latest) and open it on your phone (Android 8.0 or newer). You may need to allow installing apps from your browser or file manager.
+
+Release APKs are signed with this certificate (SHA-256):
+
+```
+a9:c8:21:2d:9c:bc:eb:f9:ba:fc:95:ff:25:ef:ae:82:21:94:f7:52:54:77:bf:e9:55:e3:f9:b7:0a:8b:39:74
+```
+
+If you installed a development build before, uninstall it first: it is signed with a different key, so Android will not update it in place.
+
 ## What it does today
 
 **Devices**
@@ -14,9 +26,10 @@ It talks to the router over SSH only. Nothing has to be installed on the router:
 - First connection shows the device fingerprint for you to confirm. If it ever changes, the app stops and asks.
 
 **Home**
-- Live download and upload speed of the internet link, with a rolling graph.
+- Live download and upload speed of the internet link. The graph shows download above a centre line and upload below it, on a labelled scale; press and drag to read any moment of the last two minutes.
+- How long the router takes to answer, next to its online status.
+- Uptime, clients, load, memory and flash usage, plus model and firmware.
 - Wi-Fi networks with their bands and connected device counts, and a join code (QR) for each.
-- Client count, load, memory, model, firmware and uptime.
 
 **Wi-Fi**
 - Edit networks: name, password, security (WPA2, WPA2/WPA3, WPA3, open), bands, hidden, client isolation, on or off.
@@ -39,6 +52,34 @@ It talks to the router over SSH only. Nothing has to be installed on the router:
 - Create a VLAN with its own address range and internet access, or one that only passes through to another device.
 - Changes that would leave your home network with no port and no Wi-Fi are refused. A device port whose VLAN goes away returns to your home network.
 - On an access point, "Add a network from my router" reads the router's guest and IoT networks and puts the same Wi-Fi names on the same VLANs, tagged on the uplink port. The router keeps doing DHCP and the firewall.
+
+**Network**
+- Interfaces with their state, addresses, traffic and uptime.
+- DHCP pools: change the range and lease time of each network.
+- Address reservations: give a device the same address every time.
+
+**Clients**
+- Every device the router knows about, wired and wireless, merged from DHCP leases, the Wi-Fi association lists and the router's neighbour table, with names from LuCI's host hints.
+- Search by name, address or MAC, and filter by Wi-Fi, wired or blocked.
+- Reconnect a Wi-Fi device, block a device from the internet straight away, or reserve its address under a name of your choice.
+
+**Firewall**
+- Port forwards from the internet: add, edit, turn on or off, remove.
+- Traffic rules: turn OpenWrt's standard rules and your own on or off, or remove them.
+- Zones, with their networks and what they allow in, out and between.
+
+**System and maintenance**
+- Device name and time zone; change the root password (the app updates its own saved login to match); reboot.
+- Services: start, stop, restart, enable and disable. Services the app needs to reach the router (dropbear, network, rpcd) cannot be stopped or disabled from the app.
+- Live system and kernel logs with search.
+- Packages: list, search, install and remove (apk or opkg). Packages the system needs are protected.
+- Backup to your phone and restore from it, with a warning when a backup came from a different device.
+
+**Config editor**
+- Every config file on the router, section by section. Change, add and remove options and sections; all edits are reviewed and applied together with the undo timer. Passwords and keys stay hidden until you open them.
+
+**Terminal**
+- A full interactive shell on the router (xterm-256color), with a key row for Esc, Ctrl, Tab, arrows and the like. Commands here run directly and are not covered by the undo timer.
 
 ## Changing a router safely
 
@@ -75,6 +116,21 @@ You need the Android SDK (platform 37) and JDK 21. Android Studio provides both.
 
 The debug APK is written to `app/build/outputs/apk/debug/`.
 
+A release build is signed with the release key. Put its location and passwords in your own `~/.gradle/gradle.properties` (never in this repository):
+
+```
+OWA_KEYSTORE=/path/to/release.jks
+OWA_KEY_ALIAS=openwrtapp
+OWA_KEYSTORE_PASSWORD=...
+OWA_KEY_PASSWORD=...
+```
+
+```bash
+./gradlew assembleRelease
+```
+
+Without those settings a release build stops with a message instead of producing an unsigned APK.
+
 ## Testing
 
 ```bash
@@ -102,14 +158,20 @@ These are skipped unless you set both variables. They only read status, plus one
 
 ```
 app/src/main/java/dev/openwrtmanager/app/
-  ssh/         SSH executor (sshj), host key policy, key generation
+  ssh/         SSH executor (sshj), interactive shell, host key policy, key generation
   router/      Read-only status queries over ubus
   uci/         Config snapshots and the uci batch builder
-  apply/       Change sets and the safe apply sequence
+  apply/       Change sets, the safe apply sequence and the health check
   wifi/        Wi-Fi model, edits, wizards, steering, join codes
+  vlan/        VLAN layout, port roles and the VLAN planner
+  clients/     Client list, blocking, reservations and DHCP pools
+  firewall/    Port forwards, traffic rules and zones
+  admin/       Services, logs, system settings, packages and backup
+  editor/      Generic config editor model
+  terminal/    Terminal session on top of the Termux emulator
   connection/  Connection state and reconnect
   data/        Device profiles and encrypted secrets
-  ui/          Compose screens and view models
+  ui/          Compose screens and view models; ui/kit holds the shared components
 ```
 
 Changes are built by pure functions from a snapshot of the current config, so they can be tested without a router. One class, `SafeApply`, is the only code that commits anything.
@@ -121,7 +183,8 @@ Changes are built by pure functions from a snapshot of the current config, so th
 | 1 | Device profiles, SSH, Home with live stats | Done |
 | 2 | Wi-Fi management, guest and IoT wizards, join codes, band steering, safe apply | Done |
 | 3 | VLANs: guest and IoT as VLANs, port roles, carrying networks to access points, health check | Done |
-| 4 | Network, clients, firewall, packages, services, logs, system, a generic config editor and a terminal | Planned |
+| 4 | Network, clients, firewall, packages, services, logs, system, a generic config editor and a terminal | Done |
+| 5 | Material 3 redesign, readable speed graph, app icon, first release (0.1.0) | Done |
 
 Known limits right now:
 
@@ -131,6 +194,8 @@ Known limits right now:
 - Each device is managed on its own. There is no "apply to all my access points" yet.
 - IPv6-only internet links are not detected as the uplink.
 - Firmware upgrades are out of scope.
+- 0.1.0 is a pre-release: blocking a device, port forwards, restoring a backup, installing packages and changing the root password have so far only been checked on test setups.
+- On routers that hand out IPv4 addresses with odhcpd instead of dnsmasq, the client count on Home can read low; the Clients tab finds those devices.
 
 ## License
 
@@ -144,7 +209,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 ### Third-party software
 
-The app is built on libraries under the Apache License 2.0 (AndroidX, Jetpack Compose, Kotlin, kotlinx, Hilt, sshj, ZXing) and the Bouncy Castle licence (Bouncy Castle), which remain under their own terms.
+The app is built on libraries under the Apache License 2.0 (AndroidX, Jetpack Compose, Kotlin, kotlinx, Hilt, sshj, ZXing, the Termux terminal emulator) and the Bouncy Castle licence (Bouncy Castle), and bundles the JetBrains Mono font under the SIL Open Font License 1.1 (its licence is in `app/src/main/assets/licenses/`). All remain under their own terms.
 
 ### Trademark
 
