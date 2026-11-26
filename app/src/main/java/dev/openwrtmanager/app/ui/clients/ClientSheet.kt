@@ -15,10 +15,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Lan
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.outlined.Lan
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +59,8 @@ import dev.openwrtmanager.app.ui.kit.MonoText
 import dev.openwrtmanager.app.ui.kit.RowDivider
 import dev.openwrtmanager.app.ui.kit.SectionCard
 import dev.openwrtmanager.app.ui.kit.TagChip
+import dev.openwrtmanager.app.ui.theme.LocalExtraColors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class Confirm { RECONNECT, BLOCK, UNBLOCK, RESERVE }
@@ -74,8 +78,16 @@ internal fun ClientSheet(
 ) {
     val name = ClientsViewModel.label(client)
     var confirm by remember { mutableStateOf<Confirm?>(null) }
+    var copiedKey by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboard.current
+
+    LaunchedEffect(copiedKey) {
+        if (copiedKey != null) {
+            delay(1_500)
+            copiedKey = null
+        }
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -91,43 +103,54 @@ internal fun ClientSheet(
                     when {
                         client.blocked -> Icons.Default.Block
                         client.link == ClientLink.WIFI -> Icons.Default.Wifi
-                        else -> Icons.Default.Lan
+                        else -> Icons.Outlined.Lan
                     },
                 )
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(client.name ?: "Unknown device", style = MaterialTheme.typography.titleLarge)
+                    Text(client.name ?: "Unnamed device", style = MaterialTheme.typography.titleLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (client.blocked) TagChip("Blocked", tone = ChipTone.ERROR)
                         if (client.reserved) TagChip("Reserved", tone = ChipTone.ACCENT)
-                        if (client.link == ClientLink.WIFI) TagChip("Wi-Fi", tone = ChipTone.OK)
-                        if (client.link == ClientLink.WIRED) TagChip("LAN")
+                        when (client.link) {
+                            ClientLink.WIFI -> {
+                                val tone = if ((client.signal ?: -60) >= -67) ChipTone.OK else ChipTone.WARNING
+                                TagChip("Wi-Fi", tone = tone)
+                            }
+                            ClientLink.WIRED -> TagChip("Wired")
+                            ClientLink.OFFLINE -> TagChip("Offline")
+                        }
                     }
                 }
             }
 
             SectionCard(contentPadding = false) {
                 DetailRow("Connection", linkText(client))
-                client.ip?.let {
+                client.ip?.let { ip ->
                     RowDivider()
-                    DetailRow("IP address", it, mono = true)
+                    CopyableDetailRow(
+                        label = "IP address",
+                        value = ip,
+                        copied = copiedKey == "ip",
+                        onCopy = {
+                            scope.launch {
+                                clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("IP address", ip)))
+                                copiedKey = "ip"
+                            }
+                        },
+                    )
                 }
                 RowDivider()
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Label("MAC address")
-                        MonoText(client.mac)
-                    }
-                    IconButton(onClick = {
+                CopyableDetailRow(
+                    label = "MAC address",
+                    value = client.mac,
+                    copied = copiedKey == "mac",
+                    onCopy = {
                         scope.launch {
                             clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("MAC address", client.mac)))
+                            copiedKey = "mac"
                         }
-                    }) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy MAC address")
-                    }
-                }
+                    },
+                )
                 client.connectedSeconds?.let {
                     RowDivider()
                     DetailRow("Connected for", duration(it), mono = true)
@@ -235,6 +258,26 @@ private fun DetailRow(label: String, value: String, mono: Boolean = false) {
             MonoText(value, maxLines = 2)
         } else {
             Text(value, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun CopyableDetailRow(label: String, value: String, copied: Boolean, onCopy: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Label(label)
+            MonoText(value)
+        }
+        IconButton(onClick = onCopy) {
+            Icon(
+                if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+                contentDescription = if (copied) "Copied $label" else "Copy $label",
+                tint = if (copied) LocalExtraColors.current.online else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
