@@ -49,9 +49,6 @@ import dev.openwrtmanager.app.ui.common.formatRate
 import dev.openwrtmanager.app.ui.kit.MonoText
 import kotlin.math.roundToInt
 
-/** Below this many samples there is no line worth drawing yet. */
-private const val MIN_SAMPLES = 3
-
 /**
  * Rolling graph mirrored around a centre line: download fills above it, upload below, so the two
  * never overlap. Both halves share one tidy, labelled scale that eases between steps; the lines
@@ -66,8 +63,10 @@ fun RateGraph(history: List<Rate>, slots: Int, sampleMs: Long, modifier: Modifie
     val peak = history.maxOfOrNull { maxOf(it.downBps, it.upBps) } ?: 0L
     val top = niceScaleTop(peak)
     val easedTop by animateFloatAsState(top.toFloat(), tween(500), label = "graph scale")
-    val ready = history.size >= MIN_SAMPLES
-    val description = if (!ready) "Speed graph, collecting" else "Speed graph, peak ${formatRate(peak)}"
+    val ready = history.isNotEmpty()
+    val description = if (!ready) "Speed graph, waiting for data" else "Speed graph, peak ${formatRate(peak)}"
+    // The line spans the whole graph from the start: a flat lead-in that real samples scroll over.
+    val drawn = leadIn(history, slots, Rate(0, 0))
 
     // Each new sample starts one step to the right and slides into place over the sample interval.
     val glide = remember { Animatable(1f) }
@@ -108,14 +107,14 @@ fun RateGraph(history: List<Rate>, slots: Int, sampleMs: Long, modifier: Modifie
             drawLine(gridColor.copy(alpha = 0.35f), Offset(0f, topY), Offset(size.width, topY), strokeWidth = 1.dp.toPx(), pathEffect = dash)
             drawLine(gridColor.copy(alpha = 0.35f), Offset(0f, bottomY), Offset(size.width, bottomY), strokeWidth = 1.dp.toPx(), pathEffect = dash)
             drawLine(gridColor, Offset(0f, centreY), Offset(size.width, centreY), strokeWidth = 1.dp.toPx())
-            if (!ready) return@Canvas
             val step = size.width / (slots - 1).coerceAtLeast(1)
             // While gliding the newest point sits just past the right edge, so it slides into view.
             val shift = (1f - glide.value) * step
-            drawSeries(history.map { it.downBps }, step, shift, easedTop, centreY, half, above = true, downColor)
-            drawSeries(history.map { it.upBps }, step, shift, easedTop, centreY, half, above = false, upColor)
+            drawSeries(drawn.map { it.downBps }, step, shift, easedTop, centreY, half, above = true, downColor)
+            drawSeries(drawn.map { it.upBps }, step, shift, easedTop, centreY, half, above = false, upColor)
             touchX?.let { x ->
                 val index = sampleAt(x, size.width, slots, history.size)
+                if (index < 0) return@let
                 val sx = size.width - step * (history.size - 1 - index)
                 drawLine(labelColor.copy(alpha = 0.6f), Offset(sx, topY), Offset(sx, bottomY), strokeWidth = 1.dp.toPx())
                 val sample = history[index]
@@ -129,17 +128,10 @@ fun RateGraph(history: List<Rate>, slots: Int, sampleMs: Long, modifier: Modifie
             Box(Modifier.weight(1f))
             MonoText("\u2191 ${axisLabel(top)}", color = upColor, size = 9.sp)
         }
-        if (!ready) {
-            Text(
-                "collecting…",
-                Modifier.align(Alignment.Center),
-                style = MaterialTheme.typography.bodySmall,
-                color = labelColor,
-            )
-        }
         val x = touchX
-        if (ready && x != null) {
-            val index = sampleAt(x, widthPx, slots, history.size)
+        val touched = if (x != null) sampleAt(x, widthPx, slots, history.size) else -1
+        if (x != null && touched >= 0) {
+            val index = touched
             val sample = history[index]
             val cardWidth = 150.dp
             val cardPx = with(LocalDensity.current) { cardWidth.toPx() }

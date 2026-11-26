@@ -30,12 +30,14 @@ class GraphMathTest {
     }
 
     @Test
-    fun a_touch_picks_the_nearest_sample_and_stays_in_range() {
+    fun a_touch_picks_the_nearest_sample_or_nothing_before_the_data() {
         // 60 slots across 590 px: one slot every 10 px, newest sample at the right edge.
         assertEquals(9, sampleAt(x = 590f, width = 590f, slots = 60, count = 10))
         assertEquals(8, sampleAt(x = 582f, width = 590f, slots = 60, count = 10))
-        assertEquals(0, sampleAt(x = 0f, width = 590f, slots = 60, count = 10))
-        assertEquals(0, sampleAt(x = 400f, width = 590f, slots = 60, count = 10))
+        // The oldest of 10 samples sits at x = 500; left of it the graph is only the flat lead-in.
+        assertEquals(0, sampleAt(x = 497f, width = 590f, slots = 60, count = 10))
+        assertEquals(-1, sampleAt(x = 400f, width = 590f, slots = 60, count = 10))
+        assertEquals(-1, sampleAt(x = 0f, width = 590f, slots = 60, count = 10))
         assertEquals(59, sampleAt(x = 600f, width = 590f, slots = 60, count = 60))
         assertEquals(-1, sampleAt(x = 300f, width = 590f, slots = 60, count = 0))
     }
